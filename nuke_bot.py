@@ -578,16 +578,378 @@ async def nuke_full(ctx):
 @bot.command(name="nuke_help")
 async def nuke_help(ctx):
     embed = _base_embed("💥  Nuke Commands", color=C.DANGER)
-    embed.add_field(name="!nuke_channels",       value="Delete all channels",                          inline=False)
-    embed.add_field(name="!nuke_roles",          value="Delete all non-default roles",                  inline=False)
-    embed.add_field(name="!nuke_channels_roles", value="Delete all channels and roles",                 inline=False)
-    embed.add_field(name="!nuke_kick",           value="Delete channels, roles, and kick all members", inline=False)
-    embed.add_field(name="!nuke_full",           value="Full reset: channels, roles, emojis, members", inline=False)
-    embed.add_field(name="!give_admin",          value="Grant yourself the Administrator role",         inline=False)
-    embed.add_field(name="!remove_admin",        value="Remove the Administrator role from yourself",   inline=False)
+    embed.add_field(name="!nuke_channels",       value="Delete all channels",                                inline=False)
+    embed.add_field(name="!nuke_roles",          value="Delete all non-default roles",                       inline=False)
+    embed.add_field(name="!nuke_channels_roles", value="Delete all channels and roles",                      inline=False)
+    embed.add_field(name="!nuke_kick",           value="Delete channels, roles, and kick all members",       inline=False)
+    embed.add_field(name="!nuke_full",           value="Full reset: channels, roles, emojis, members",       inline=False)
+    embed.add_field(name="!give_admin",          value="Grant yourself the Administrator role",               inline=False)
+    embed.add_field(name="!remove_admin",        value="Remove the Administrator role from yourself",         inline=False)
     embed.add_field(name="!show_high",           value="Show the highest roles in the server and their permissions", inline=False)
-    embed.set_footer(text="⚠️  Requires Administrator · All actions ask for confirmation.")
+    embed.add_field(name="— MASS MEMBER ACTIONS —", value="\u200b",                                          inline=False)
+    embed.add_field(name="!mass_timeout [minutes]",  value="Timeout every member at once",                   inline=False)
+    embed.add_field(name="!mass_untimeout",           value="Remove all timeouts at once",                    inline=False)
+    embed.add_field(name="!mass_ban",                 value="Ban every member (except authorized users)",     inline=False)
+    embed.add_field(name="!mass_deafen",              value="Deafen all members in voice channels",           inline=False)
+    embed.add_field(name="!mass_disconnect",          value="Disconnect everyone from voice channels",        inline=False)
+    embed.add_field(name="— CHANNEL CONTROL —",  value="\u200b",                                             inline=False)
+    embed.add_field(name="!lockdown",                 value="Lock every channel at once",                     inline=False)
+    embed.add_field(name="!unlockdown",               value="Unlock all channels at once",                    inline=False)
+    embed.add_field(name="!slowmode_all [seconds]",   value="Apply slowmode to every channel at once",        inline=False)
+    embed.add_field(name="— ROLE CONTROL —",     value="\u200b",                                             inline=False)
+    embed.add_field(name="!strip_roles",              value="Remove all roles from every member",             inline=False)
+    embed.add_field(name="!mass_role_add [role]",     value="Add a specific role to everyone",                inline=False)
+    embed.add_field(name="!mass_role_remove [role]",  value="Remove a specific role from everyone",           inline=False)
+    embed.add_field(name="— SERVER CONTROL —",   value="\u200b",                                             inline=False)
+    embed.add_field(name="!rename_all_channels [name]", value="Rename every channel",                        inline=False)
+    embed.add_field(name="!change_server_name [name]",  value="Change the server name",                      inline=False)
+    embed.add_field(name="!change_server_icon [url]",   value="Change the server icon via image URL",        inline=False)
+    embed.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
     await ctx.send(embed=embed)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 💪 MASS MEMBER ACTION COMMANDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@bot.command(name="mass_timeout")
+async def mass_timeout(ctx, minutes: int = 10):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, f"timeout **ALL** members for **{minutes} minutes**"):
+        return
+    guild = ctx.guild
+    until = discord.utils.utcnow() + timedelta(minutes=minutes)
+    count = 0
+    for member in guild.members:
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        try:
+            await member.timeout(until, reason=f"Mass timeout by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER))
+
+@bot.command(name="mass_untimeout")
+async def mass_untimeout(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "remove timeouts from **ALL** members"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.bot or member.timed_out_until is None:
+            continue
+        try:
+            await member.timeout(None, reason=f"Mass untimeout by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS))
+
+@bot.command(name="mass_ban")
+async def mass_ban(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "ban **ALL** members"):
+        return
+    guild = ctx.guild
+    count = 0
+    async for member in guild.fetch_members(limit=None):
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        try:
+            await guild.ban(member, reason=f"Mass ban by {ctx.author}", delete_message_days=0)
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER))
+
+@bot.command(name="mass_deafen")
+async def mass_deafen(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "deafen **ALL** members in voice channels"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.voice is None or member.bot:
+            continue
+        try:
+            await member.edit(deafen=True, reason=f"Mass deafen by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER))
+
+@bot.command(name="mass_disconnect")
+async def mass_disconnect(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "disconnect **ALL** members from voice channels"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.voice is None or member.bot:
+            continue
+        try:
+            await member.move_to(None, reason=f"Mass disconnect by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🔒 CHANNEL CONTROL COMMANDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@bot.command(name="lockdown")
+async def lockdown(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "lock **ALL** channels"):
+        return
+    guild = ctx.guild
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            overwrite = channel.overwrites_for(guild.default_role)
+            overwrite.send_messages = False
+            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Lockdown by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER))
+
+@bot.command(name="unlockdown")
+async def unlockdown(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "unlock **ALL** channels"):
+        return
+    guild = ctx.guild
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            overwrite = channel.overwrites_for(guild.default_role)
+            overwrite.send_messages = None
+            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Unlockdown by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS))
+
+@bot.command(name="slowmode_all")
+async def slowmode_all(ctx, seconds: int = 10):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    seconds = max(0, min(21600, seconds))
+    if not await confirm(ctx, f"set slowmode to **{seconds}s** in **ALL** channels"):
+        return
+    guild = ctx.guild
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            await channel.edit(slowmode_delay=seconds, reason=f"Mass slowmode by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    label = f"{seconds}s" if seconds > 0 else "disabled"
+    await ctx.send(embed=_base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🎭 ROLE CONTROL COMMANDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@bot.command(name="strip_roles")
+async def strip_roles(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "strip **ALL** roles from every member"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        removable = [r for r in member.roles if not r.is_default() and not r.managed]
+        if not removable:
+            continue
+        try:
+            await member.remove_roles(*removable, reason=f"Strip roles by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER))
+
+@bot.command(name="mass_role_add")
+async def mass_role_add(ctx, *, role: discord.Role):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, f"add **{role.name}** to **ALL** members"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.bot or role in member.roles:
+            continue
+        try:
+            await member.add_roles(role, reason=f"Mass role add by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("✅  Role Added", f"Added **{role.name}** to **{count}** members.", C.SUCCESS))
+
+@bot.command(name="mass_role_remove")
+async def mass_role_remove(ctx, *, role: discord.Role):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, f"remove **{role.name}** from **ALL** members"):
+        return
+    guild = ctx.guild
+    count = 0
+    for member in guild.members:
+        if member.bot or role not in member.roles:
+            continue
+        try:
+            await member.remove_roles(role, reason=f"Mass role remove by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("🗑️  Role Removed", f"Removed **{role.name}** from **{count}** members.", C.DANGER))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🏠 SERVER CONTROL COMMANDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@bot.command(name="rename_all_channels")
+async def rename_all_channels(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    try:
+        await ctx.author.send(embed=_base_embed("✏️  Rename All Channels", "What would you like to rename all channels to? Reply here with the name.", C.WARNING))
+    except discord.Forbidden:
+        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+        return
+
+    def dm_check(m):
+        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
+        name = reply.content.strip()
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        return
+
+    if not await confirm(ctx, f"rename **ALL** channels to `{name}`"):
+        return
+    guild = ctx.guild
+    count = 0
+    for channel in guild.channels:
+        try:
+            await channel.edit(name=name, reason=f"Mass rename by {ctx.author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    await ctx.send(embed=_base_embed("✏️  Channels Renamed", f"Renamed **{count}** channels to `{name}`.", C.WARNING))
+
+@bot.command(name="change_server_name")
+async def change_server_name(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    try:
+        await ctx.author.send(embed=_base_embed("✏️  Change Server Name", "What would you like to rename the server to? Reply here with the name.", C.WARNING))
+    except discord.Forbidden:
+        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+        return
+
+    def dm_check(m):
+        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
+        name = reply.content.strip()
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        return
+
+    if not await confirm(ctx, f"change the server name to **{name}**"):
+        return
+    old_name = ctx.guild.name
+    try:
+        await ctx.guild.edit(name=name, reason=f"Server rename by {ctx.author}")
+        await ctx.send(embed=_base_embed("✏️  Server Renamed", f"Server name changed from **{old_name}** to **{name}**.", C.SUCCESS))
+    except (discord.Forbidden, discord.HTTPException) as e:
+        await ctx.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
+
+@bot.command(name="change_server_icon")
+async def change_server_icon(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    try:
+        await ctx.author.send(embed=_base_embed("🖼️  Change Server Icon", "Please reply with the **image URL** you want to use as the new server icon.", C.WARNING))
+    except discord.Forbidden:
+        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+        return
+
+    def dm_check(m):
+        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
+        url = reply.content.strip()
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        return
+
+    if not await confirm(ctx, "change the **server icon**"):
+        return
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    await ctx.send(embed=_base_embed("❌  Failed", "Could not fetch image from that URL.", C.DANGER))
+                    return
+                icon_bytes = await resp.read()
+        await ctx.guild.edit(icon=icon_bytes, reason=f"Icon change by {ctx.author}")
+        await ctx.send(embed=_base_embed("🖼️  Icon Updated", "Server icon has been changed.", C.SUCCESS))
+    except (discord.Forbidden, discord.HTTPException) as e:
+        await ctx.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
