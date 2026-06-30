@@ -874,9 +874,7 @@ async def rename_all_channels(ctx):
 
     await ctx.author.send(embed=_base_embed(
         "⚠️  Confirm Action",
-        f"You are about to rename **ALL** channels to `{name}`.
-
-Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        f"You are about to rename **ALL** channels to `{name}`.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
         C.WARNING,
     ))
     try:
@@ -922,9 +920,7 @@ async def change_server_name(ctx):
 
     await ctx.author.send(embed=_base_embed(
         "⚠️  Confirm Action",
-        f"You are about to change the server name to **{name}**.
-
-Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        f"You are about to change the server name to **{name}**.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
         C.WARNING,
     ))
     try:
@@ -966,9 +962,7 @@ async def change_server_icon(ctx):
 
     await ctx.author.send(embed=_base_embed(
         "⚠️  Confirm Action",
-        f"You are about to change the **server icon** to the provided URL.
-
-Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        "You are about to change the **server icon** to the provided URL.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
         C.WARNING,
     ))
     try:
