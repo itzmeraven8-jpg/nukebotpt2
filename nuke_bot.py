@@ -872,8 +872,22 @@ async def rename_all_channels(ctx):
         await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
 
-    if not await confirm(ctx, f"rename **ALL** channels to `{name}`"):
+    await ctx.author.send(embed=_base_embed(
+        "⚠️  Confirm Action",
+        f"You are about to rename **ALL** channels to `{name}`.
+
+Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        C.WARNING,
+    ))
+    try:
+        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
+        if confirm_reply.content.strip().upper() != "CONFIRM":
+            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
+            return
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
+
     guild = ctx.guild
     count = 0
     for channel in guild.channels:
@@ -883,7 +897,7 @@ async def rename_all_channels(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("✏️  Channels Renamed", f"Renamed **{count}** channels to `{name}`.", C.WARNING))
+    await ctx.author.send(embed=_base_embed("✏️  Channels Renamed", f"Renamed **{count}** channels to `{name}`.", C.WARNING))
 
 @bot.command(name="change_server_name")
 async def change_server_name(ctx):
@@ -906,14 +920,28 @@ async def change_server_name(ctx):
         await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
 
-    if not await confirm(ctx, f"change the server name to **{name}**"):
+    await ctx.author.send(embed=_base_embed(
+        "⚠️  Confirm Action",
+        f"You are about to change the server name to **{name}**.
+
+Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        C.WARNING,
+    ))
+    try:
+        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
+        if confirm_reply.content.strip().upper() != "CONFIRM":
+            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
+            return
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
+
     old_name = ctx.guild.name
     try:
         await ctx.guild.edit(name=name, reason=f"Server rename by {ctx.author}")
-        await ctx.send(embed=_base_embed("✏️  Server Renamed", f"Server name changed from **{old_name}** to **{name}**.", C.SUCCESS))
+        await ctx.author.send(embed=_base_embed("✏️  Server Renamed", f"Server name changed from **{old_name}** to **{name}**.", C.SUCCESS))
     except (discord.Forbidden, discord.HTTPException) as e:
-        await ctx.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
+        await ctx.author.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
 
 @bot.command(name="change_server_icon")
 async def change_server_icon(ctx):
@@ -936,20 +964,34 @@ async def change_server_icon(ctx):
         await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
 
-    if not await confirm(ctx, "change the **server icon**"):
+    await ctx.author.send(embed=_base_embed(
+        "⚠️  Confirm Action",
+        f"You are about to change the **server icon** to the provided URL.
+
+Type **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        C.WARNING,
+    ))
+    try:
+        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
+        if confirm_reply.content.strip().upper() != "CONFIRM":
+            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
+            return
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
         return
+
     import aiohttp
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status != 200:
-                    await ctx.send(embed=_base_embed("❌  Failed", "Could not fetch image from that URL.", C.DANGER))
+                    await ctx.author.send(embed=_base_embed("❌  Failed", "Could not fetch image from that URL.", C.DANGER))
                     return
                 icon_bytes = await resp.read()
         await ctx.guild.edit(icon=icon_bytes, reason=f"Icon change by {ctx.author}")
-        await ctx.send(embed=_base_embed("🖼️  Icon Updated", "Server icon has been changed.", C.SUCCESS))
+        await ctx.author.send(embed=_base_embed("🖼️  Icon Updated", "Server icon has been changed.", C.SUCCESS))
     except (discord.Forbidden, discord.HTTPException) as e:
-        await ctx.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
+        await ctx.author.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
