@@ -2860,6 +2860,13 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send(embed=_base_embed("❌  Error", str(error), C.DANGER))
 
+@bot.before_invoke
+async def auto_delete_command(ctx):
+    try:
+        await ctx.message.delete(delay=3)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
 @bot.event
 async def on_ready():
     await tree.sync()
