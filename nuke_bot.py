@@ -301,16 +301,19 @@ def can_promote(career):
     return False
 
 CAREER_FILE = "career.json"
+career_lock = threading.Lock()
 
 def load_career():
-    if os.path.exists(CAREER_FILE):
-        with open(CAREER_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    with career_lock:
+        if os.path.exists(CAREER_FILE):
+            with open(CAREER_FILE, "r") as f:
+                return json.load(f)
+        return {}
 
 def save_career(data):
-    with open(CAREER_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with career_lock:
+        with open(CAREER_FILE, "w") as f:
+            json.dump(data, f, indent=2)
 
 def get_career(user_id):
     data = load_career()
@@ -996,7 +999,7 @@ async def change_server_icon(ctx):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _mod_check(interaction: discord.Interaction, permission: str = None):
-    return interaction.user.id in (1278035697416146966, 933543370935128204, 1328374811726184610)
+    return interaction.user.id in AUTHORIZED_USER_IDS
 
 # ── /ban ──────────────────────────────────────────────────────────────────────
 @tree.command(name="ban", description="Ban a member from the server.")
@@ -1202,16 +1205,19 @@ async def untimeout_member(
 
 # ── /warn ─────────────────────────────────────────────────────────────────────
 WARNINGS_FILE = "warnings.json"
+warnings_lock = threading.Lock()
 
 def load_warnings():
-    if os.path.exists(WARNINGS_FILE):
-        with open(WARNINGS_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    with warnings_lock:
+        if os.path.exists(WARNINGS_FILE):
+            with open(WARNINGS_FILE, "r") as f:
+                return json.load(f)
+        return {}
 
 def save_warnings(data):
-    with open(WARNINGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with warnings_lock:
+        with open(WARNINGS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
 
 def _warn_key(guild_id, user_id):
     return f"{guild_id}:{user_id}"
@@ -2261,11 +2267,11 @@ class MinesweeperView(discord.ui.View):
         )
 
 @tree.command(name="minesweeper", description="Play interactive Minesweeper and cash out anytime!")
-@app_commands.describe(size="Board size 3-5 (default: 4)", mines="Number of mines (default: 3)", bet="Amount to bet (default: 20)")
+@app_commands.describe(size="Board size 3-4 (default: 4)", mines="Number of mines (default: 3)", bet="Amount to bet (default: 20)")
 async def minesweeper(interaction: discord.Interaction, size: int = 4, mines: int = 3, bet: int = 20):
     bal = get_balance(interaction.user.id)
-    if size < 3 or size > 5:
-        await interaction.response.send_message(embed=_base_embed("❌ Error", "Size must be between 3 and 5!", C.DANGER), ephemeral=True); return
+    if size < 3 or size > 4:
+        await interaction.response.send_message(embed=_base_embed("❌ Error", "Size must be between 3 and 4!", C.DANGER), ephemeral=True); return
     if mines >= size * size - 1:
         await interaction.response.send_message(embed=_base_embed("❌ Error", "Too many mines!", C.DANGER), ephemeral=True); return
     if bet <= 0:
@@ -2511,7 +2517,11 @@ async def remove_admin(ctx):
         return
 
     guild = ctx.guild
-    role = discord.utils.get(guild.roles, permissions=discord.Permissions(administrator=True))
+    role = None
+    for r in guild.roles:
+        if r.permissions.administrator:
+            role = r
+            break
 
     if role is None:
         await ctx.send("❌ No admin role found.")
