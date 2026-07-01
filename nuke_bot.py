@@ -366,11 +366,10 @@ async def confirm(ctx, action: str) -> bool:
             check=check
         )
 
-        try:
-            await prompt_msg.delete(delay=3)
-            await reply.delete(delay=3)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+        # Track the user's CONFIRM message for deletion after command finishes
+        tracked = _cmd_bot_messages.get(ctx.message.id)
+        if tracked is not None:
+            tracked.append(reply)
 
         if reply.content.strip().upper() == "CONFIRM":
             return True
@@ -381,22 +380,16 @@ async def confirm(ctx, action: str) -> bool:
                 "Confirmation failed.",
                 C.NEUTRAL
             ),
-            delete_after=3
         )
         return False
 
     except asyncio.TimeoutError:
-        try:
-            await prompt_msg.delete(delay=3)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
         await ctx.send(
             embed=_base_embed(
                 "⏱️  Timed Out",
                 "No response received — action cancelled.",
                 C.NEUTRAL
             ),
-            delete_after=3
         )
         return False
 
@@ -615,7 +608,7 @@ async def nuke_help(ctx):
     embed2.add_field(name="!change_server_icon",     value="Change the server icon (prompts via DM)",        inline=False)
     embed2.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
 
-    await ctx.send(embeds=[embed1, embed2], delete_after=60)
+    await ctx.send(embeds=[embed1, embed2])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2872,18 +2865,20 @@ async def on_command_error(ctx, error):
 
 _cmd_bot_messages = {}
 
+# Commands that just display info — their messages stay visible and never auto-delete
+DISPLAY_ONLY_COMMANDS = {"nuke_help", "show_high"}
+
 @bot.before_invoke
-async def auto_delete_cmd_msg(ctx):
-    # Delete the user's command message after 3 seconds
-    try:
-        await ctx.message.delete(delay=3)
-    except (discord.Forbidden, discord.HTTPException):
-        pass
-    # nuke_help stays visible — skip tracking it
-    if ctx.command and ctx.command.name == "nuke_help":
+async def track_cmd(ctx):
+    # Display-only commands: only delete the user's command message after 3s, leave bot messages alone
+    if ctx.command and ctx.command.name in DISPLAY_ONLY_COMMANDS:
+        try:
+            await ctx.message.delete(delay=3)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
         return
-    # Track all bot messages sent during this command
-    _cmd_bot_messages[ctx.message.id] = []
+    # All other commands: track user message + all bot messages for cleanup after execution
+    _cmd_bot_messages[ctx.message.id] = [ctx.message]
     original_send = ctx.send
     async def tracked_send(*args, **kwargs):
         kwargs.pop("delete_after", None)
@@ -2894,8 +2889,12 @@ async def auto_delete_cmd_msg(ctx):
     ctx.send = tracked_send
 
 @bot.after_invoke
-async def auto_delete_bot_embeds(ctx):
-    # Delete all bot embed messages once the command is fully done
+async def cleanup_cmd(ctx):
+    # Display-only commands are skipped — nothing to clean up
+    if ctx.command and ctx.command.name in DISPLAY_ONLY_COMMANDS:
+        return
+    # Delete everything 2 seconds after the command fully finishes
+    await asyncio.sleep(2)
     msgs = _cmd_bot_messages.pop(ctx.message.id, [])
     for msg in msgs:
         try:
