@@ -615,7 +615,7 @@ async def nuke_help(ctx):
     embed2.add_field(name="!change_server_icon",     value="Change the server icon (prompts via DM)",        inline=False)
     embed2.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
 
-    await ctx.send(embeds=[embed1, embed2], delete_after=3)
+    await ctx.send(embeds=[embed1, embed2], delete_after=60)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2879,6 +2879,9 @@ async def auto_delete_cmd_msg(ctx):
         await ctx.message.delete(delay=3)
     except (discord.Forbidden, discord.HTTPException):
         pass
+    # nuke_help stays visible — skip tracking it
+    if ctx.command and ctx.command.name == "nuke_help":
+        return
     # Track all bot messages sent during this command
     _cmd_bot_messages[ctx.message.id] = []
     original_send = ctx.send
