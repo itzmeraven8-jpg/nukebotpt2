@@ -2870,12 +2870,35 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send(embed=_base_embed("❌  Error", str(error), C.DANGER))
 
+_cmd_bot_messages = {}
+
 @bot.before_invoke
-async def auto_delete_command(ctx):
+async def auto_delete_cmd_msg(ctx):
+    # Delete the user's command message after 3 seconds
     try:
         await ctx.message.delete(delay=3)
     except (discord.Forbidden, discord.HTTPException):
         pass
+    # Track all bot messages sent during this command
+    _cmd_bot_messages[ctx.message.id] = []
+    original_send = ctx.send
+    async def tracked_send(*args, **kwargs):
+        kwargs.pop("delete_after", None)
+        msg = await original_send(*args, **kwargs)
+        if msg:
+            _cmd_bot_messages[ctx.message.id].append(msg)
+        return msg
+    ctx.send = tracked_send
+
+@bot.after_invoke
+async def auto_delete_bot_embeds(ctx):
+    # Delete all bot embed messages once the command is fully done
+    msgs = _cmd_bot_messages.pop(ctx.message.id, [])
+    for msg in msgs:
+        try:
+            await msg.delete()
+        except (discord.Forbidden, discord.HTTPException, discord.NotFound):
+            pass
 
 @bot.event
 async def on_ready():
