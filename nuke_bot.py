@@ -351,7 +351,7 @@ async def confirm(ctx, action: str) -> bool:
         ),
         C.WARNING,
     )
-    await ctx.send(embed=embed)
+    prompt_msg = await ctx.send(embed=embed)
 
     def check(m):
         return (
@@ -366,6 +366,12 @@ async def confirm(ctx, action: str) -> bool:
             check=check
         )
 
+        try:
+            await prompt_msg.delete(delay=3)
+            await reply.delete(delay=3)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
         if reply.content.strip().upper() == "CONFIRM":
             return True
 
@@ -375,29 +381,33 @@ async def confirm(ctx, action: str) -> bool:
                 "Confirmation failed.",
                 C.NEUTRAL
             ),
-            delete_after=5
+            delete_after=3
         )
         return False
 
     except asyncio.TimeoutError:
+        try:
+            await prompt_msg.delete(delay=3)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
         await ctx.send(
             embed=_base_embed(
                 "⏱️  Timed Out",
                 "No response received — action cancelled.",
                 C.NEUTRAL
             ),
-            delete_after=5
+            delete_after=3
         )
         return False
 
 
-async def send_result(ctx, results: list[str]):
+async def send_result(ctx, results: list[str], delete_after=None):
     embed = _base_embed(
         "💥  Operation Complete",
         "\n".join(results),
         C.DANGER
     )
-    await ctx.send(embed=embed)
+    await ctx.send(embed=embed, delete_after=delete_after)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -444,7 +454,7 @@ async def nuke_roles(ctx):
             await asyncio.sleep(0.005)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await send_result(ctx, [f"🗑️  Deleted **{count}** roles."])
+    await send_result(ctx, [f"🗑️  Deleted **{count}** roles."], delete_after=3)
 
 @bot.command(name="nuke_channels_roles")
 async def nuke_channels_roles(ctx):
@@ -605,7 +615,7 @@ async def nuke_help(ctx):
     embed2.add_field(name="!change_server_icon",     value="Change the server icon (prompts via DM)",        inline=False)
     embed2.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
 
-    await ctx.send(embeds=[embed1, embed2])
+    await ctx.send(embeds=[embed1, embed2], delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -631,7 +641,7 @@ async def mass_timeout(ctx, minutes: int = 10):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER))
+    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_untimeout")
 async def mass_untimeout(ctx):
@@ -651,7 +661,7 @@ async def mass_untimeout(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS))
+    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS), delete_after=3)
 
 @bot.command(name="mass_ban")
 async def mass_ban(ctx):
@@ -671,7 +681,7 @@ async def mass_ban(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER))
+    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_deafen")
 async def mass_deafen(ctx):
@@ -691,7 +701,7 @@ async def mass_deafen(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER))
+    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_disconnect")
 async def mass_disconnect(ctx):
@@ -711,7 +721,7 @@ async def mass_disconnect(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER))
+    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER), delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -736,7 +746,7 @@ async def lockdown(ctx):
             await asyncio.sleep(0.05)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER))
+    await ctx.send(embed=_base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER), delete_after=3)
 
 @bot.command(name="unlockdown")
 async def unlockdown(ctx):
@@ -756,7 +766,7 @@ async def unlockdown(ctx):
             await asyncio.sleep(0.05)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS))
+    await ctx.send(embed=_base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS), delete_after=3)
 
 @bot.command(name="slowmode_all")
 async def slowmode_all(ctx, seconds: int = 10):
@@ -776,7 +786,7 @@ async def slowmode_all(ctx, seconds: int = 10):
         except (discord.Forbidden, discord.HTTPException):
             pass
     label = f"{seconds}s" if seconds > 0 else "disabled"
-    await ctx.send(embed=_base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING))
+    await ctx.send(embed=_base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING), delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -804,7 +814,7 @@ async def strip_roles(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER))
+    await ctx.send(embed=_base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_role_add")
 async def mass_role_add(ctx, *, role: discord.Role):
@@ -824,7 +834,7 @@ async def mass_role_add(ctx, *, role: discord.Role):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("✅  Role Added", f"Added **{role.name}** to **{count}** members.", C.SUCCESS))
+    await ctx.send(embed=_base_embed("✅  Role Added", f"Added **{role.name}** to **{count}** members.", C.SUCCESS), delete_after=3)
 
 @bot.command(name="mass_role_remove")
 async def mass_role_remove(ctx, *, role: discord.Role):
@@ -844,7 +854,7 @@ async def mass_role_remove(ctx, *, role: discord.Role):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🗑️  Role Removed", f"Removed **{role.name}** from **{count}** members.", C.DANGER))
+    await ctx.send(embed=_base_embed("🗑️  Role Removed", f"Removed **{role.name}** from **{count}** members.", C.DANGER), delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
