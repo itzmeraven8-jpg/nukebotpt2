@@ -4325,6 +4325,60 @@ async def on_invite_delete(invite):
         C.DANGER,
         fields,
     )
+    @tree.command(name="testgreet", description="Test the welcome greeting embed.")
+@app_commands.describe(member="Member to preview the welcome greet for")
+async def testgreet(interaction: discord.Interaction, member: discord.Member = None):
+    if not _mod_check(interaction, "manage_channels"):
+        await interaction.response.send_message(
+            embed=_base_embed("🚫  Permission Denied", "You need permission to test welcome greetings.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Server Only", "This command can only be used inside a server.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    channel = _welcome_channel(guild)
+    if channel is None:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Missing Channel", "I could not find a `#welcome` channel.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Error", "I could not check my permissions.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    perms = channel.permissions_for(me)
+    if not perms.send_messages or not perms.embed_links:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Missing Permission", "I need **Send Messages** and **Embed Links** in `#welcome`.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    target = member or interaction.user
+
+    await _send_welcome_message(target)
+
+    await interaction.response.send_message(
+        embed=_base_embed(
+            "✅  Test Greet Sent",
+            f"Sent a test welcome greet for {target.mention} in {channel.mention}.",
+            C.SUCCESS,
+        ),
+        ephemeral=True,
+    )
     
 # ══════════════════════════════════════════════════════════════════════════════
 # 🛡️ ERROR HANDLING & STARTUP
