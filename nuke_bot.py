@@ -1000,6 +1000,246 @@ async def change_server_icon(ctx):
 
 def _mod_check(interaction: discord.Interaction, permission: str = None):
     return interaction.user.id in AUTHORIZED_USER_IDS
+SERVER_TEMPLATE = {
+    "📢 Info": [
+        ("text", "welcome", "Say hello to new people joining.", "read_only"),
+        ("text", "rules", "How to not get banned.", "read_only"),
+        ("text", "announcements", "Big updates you actually need to read..", "read_only"),
+    ],
+    "💬 Chat": [
+        ("text", "general", "Just chilling and talking about whatever.", "chat"),
+        ("text", "bot-commands", "Keep your spammy bot stuff in here.", "bot_commands"),
+        ("text", "media", "Photos, videos, and links.", "media"),
+        ("text", "memes", "Jokes and internet humor.", "media"),
+        ("text", "gaming", "Drop your best shitposts and jokes.", "chat"),
+        ("text", "clips-highlights", "Gameplay videos.", "media"),
+    ],
+    "🛠️ Feedback": [
+        ("text", "suggestions", "Tell us how to make the server better.", "suggestions"),
+    ],
+    "🔊 Voice Channels": [
+        ("voice", "🔊 Lounge", "Hop in to talk.", "voice"),
+        ("voice", "💤 AFK", "Where you get dumped when you walk away.", "afk_voice"),
+    ],
+}
+
+
+def _setup_overwrites(guild: discord.Guild, preset: str):
+    everyone = guild.default_role
+
+    if preset == "read_only":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=False,
+                add_reactions=False,
+                create_public_threads=False,
+                create_private_threads=False,
+            )
+        }
+
+    if preset == "bot_commands":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=True,
+                attach_files=False,
+                embed_links=False,
+            )
+        }
+
+    if preset == "media":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=True,
+                attach_files=True,
+                embed_links=True,
+            )
+        }
+
+    if preset == "suggestions":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=True,
+                add_reactions=True,
+                create_public_threads=True,
+            )
+        }
+
+    if preset == "afk_voice":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=False,
+                stream=False,
+                use_voice_activation=False,
+            )
+        }
+
+    if preset == "voice":
+        return {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=True,
+                stream=True,
+                use_voice_activation=True,
+            )
+        }
+
+    return {
+        everyone: discord.PermissionOverwrite(
+            view_channel=True,
+            read_message_history=True,
+            send_messages=True,
+        )
+    }
+
+
+def _find_category(guild: discord.Guild, name: str):
+    return discord.utils.get(guild.categories, name=name)
+
+
+def _find_channel(guild: discord.Guild, name: str, channel_type: str):
+    channels = guild.voice_channels if channel_type == "voice" else guild.text_channels
+    return discord.utils.get(channels, name=name)
+
+
+@tree.command(name="setup_server", description="Create the default community server channels.")
+async def setup_server(interaction: discord.Interaction):
+    if not _mod_check(interaction, "manage_channels"):
+        await interaction.response.send_message(
+            embed=_base_embed("🚫  Permission Denied", "You need **Manage Channels** permission.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Server Only", "This command can only be used inside a server.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None or not me.guild_permissions.manage_channels:
+        await interaction.response.send_message(
+            embed=_base_embed("❌  Missing Permission", "I need **Manage Channels** to build the server layout.", C.DANGER),
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    created = []
+    updated = []
+    skipped = []
+    afk_channel = None
+
+    for category_name, channel_specs in SERVER_TEMPLATE.items():
+        category = _find_category(guild, category_name)
+        category_overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=True)
+        }
+
+        try:
+            if category is None:
+                category = await guild.create_category(
+                    category_name,
+                    overwrites=category_overwrites,
+                    reason=f"Server setup by {interaction.user}",
+                )
+                created.append(category_name)
+            else:
+                await category.edit(
+                    overwrites=category_overwrites,
+                    reason=f"Server setup refresh by {interaction.user}",
+                )
+                updated.append(category_name)
+        except (discord.Forbidden, discord.HTTPException):
+            skipped.append(category_name)
+            continue
+
+        for channel_type, channel_name, topic, preset in channel_specs:
+            overwrites = _setup_overwrites(guild, preset)
+            channel = _find_channel(guild, channel_name, channel_type)
+
+            try:
+                if channel is None and channel_type == "text":
+                    await guild.create_text_channel(
+                        channel_name,
+                        category=category,
+                        topic=topic,
+                        overwrites=overwrites,
+                        reason=f"Server setup by {interaction.user}",
+                    )
+                    created.append(f"#{channel_name}")
+
+                elif channel is None:
+                    channel = await guild.create_voice_channel(
+                        channel_name,
+                        category=category,
+                        overwrites=overwrites,
+                        reason=f"Server setup by {interaction.user}",
+                    )
+                    created.append(channel_name)
+
+                else:
+                    if channel_type == "text":
+                        await channel.edit(
+                            category=category,
+                            topic=topic,
+                            overwrites=overwrites,
+                            reason=f"Server setup refresh by {interaction.user}",
+                        )
+                        updated.append(f"#{channel_name}")
+                    else:
+                        await channel.edit(
+                            category=category,
+                            overwrites=overwrites,
+                            reason=f"Server setup refresh by {interaction.user}",
+                        )
+                        updated.append(channel_name)
+
+                if preset == "afk_voice":
+                    afk_channel = channel or _find_channel(guild, channel_name, channel_type)
+
+            except (discord.Forbidden, discord.HTTPException):
+                skipped.append(f"#{channel_name}" if channel_type == "text" else channel_name)
+
+    if afk_channel and me.guild_permissions.manage_guild:
+        try:
+            await guild.edit(
+                afk_channel=afk_channel,
+                reason=f"Server setup by {interaction.user}",
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            skipped.append("AFK server setting")
+
+    embed = _base_embed(
+        "✅  Server Setup Complete",
+        "Created or refreshed the community channel layout.",
+        C.SUCCESS,
+    )
+    embed.add_field(name="Created", value="\n".join(created[:20]) or "None", inline=False)
+    embed.add_field(name="Updated", value="\n".join(updated[:20]) or "None", inline=False)
+
+    if skipped:
+        embed.add_field(name="Skipped", value="\n".join(skipped[:20]), inline=False)
+
+    embed.set_footer(
+        text="Use /setup_server again to refresh permissions and topics.",
+        icon_url=BOT_THUMBNAIL,
+    )
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 # ── /ban ──────────────────────────────────────────────────────────────────────
 @tree.command(name="ban", description="Ban a member from the server.")
