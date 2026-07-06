@@ -3368,11 +3368,11 @@ def _welcome_channel(guild: discord.Guild):
 async def _send_staff_log(guild: discord.Guild, title: str, description: str, color=C.NEUTRAL, fields=None,
                            category: str = None, thumbnail_url: str = None):
     """
-    Posts a clean, Probot-style log embed:
-      - small uppercase "eyebrow" (category) above the title, e.g. MODERATION / MESSAGES / ROLES
+    Posts a log embed styled to match /void's look:
+      - small uppercase "eyebrow" (category) as the author chip, next to the acting user's avatar
+      - the description rendered as a dim ANSI terminal line instead of plain text
       - a colour that's specific to the *action*, not just success/warning/danger
-      - the target's avatar as the thumbnail when available, falling back to the bot's icon
-      - a coloured divider line under the description for a bit of visual structure
+      - clean field labels, no filler dividers or bullet clutter
     """
     if guild is None:
         return
@@ -3391,13 +3391,17 @@ async def _send_staff_log(guild: discord.Guild, title: str, description: str, co
 
     embed = discord.Embed(
         title=title,
-        description=f"{description}\n{'▬' * 12}" if description else None,
+        description=(
+            "```ansi\n"
+            f"\u001b[0;90m{description}\u001b[0m\n"
+            "```"
+        ) if description else None,
         color=color,
         timestamp=datetime.now(UTC),
     )
 
     if category:
-        embed.set_author(name=category.upper())
+        embed.set_author(name=category.upper(), icon_url=thumbnail_url or BOT_THUMBNAIL)
 
     embed.set_thumbnail(url=thumbnail_url or BOT_THUMBNAIL)
     embed.set_footer(text=BOT_FOOTER, icon_url=BOT_THUMBNAIL)
@@ -3405,7 +3409,7 @@ async def _send_staff_log(guild: discord.Guild, title: str, description: str, co
     if fields:
         for name, value, inline in fields:
             embed.add_field(
-                name=f"› {name}",
+                name=name,
                 value=_short(value, 1024) or "None",
                 inline=inline,
             )
@@ -3437,33 +3441,48 @@ async def _send_welcome_message(member: discord.Member):
     is_new_account = account_age_days < 7
 
     embed = discord.Embed(
-        title=f"👋  Welcome to {guild.name}!",
+        title=f"👋  Welcome to {guild.name}",
         description=(
-            f"### {member.mention}, glad to have you here!\n"
-            f"{'▬' * 14}"
+            "```ansi\n"
+            f"\u001b[1;37m{member.name} just joined the server.\u001b[0m\n"
+            f"\u001b[0;90mGlad to have you here — make yourself at home.\u001b[0m\n"
+            "```"
         ),
-        color=C.JOIN,
+        color=0x2B2D31,
         timestamp=datetime.now(UTC),
     )
 
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    embed.set_author(name=f"{member} joined", icon_url=member.display_avatar.url)
     embed.set_thumbnail(url=member.display_avatar.url)
 
-    # Use the server icon as a banner-ish image if one exists, for a bit more polish
-    if guild.icon:
-        embed.set_image(url=guild.icon.url)
+    embed.add_field(
+        name="👤 Member",
+        value=(
+            "```\n"
+            f"User      {member}\n"
+            f"ID        {member.id}\n"
+            f"Position  #{member_count:,}\n"
+            "```"
+        ),
+        inline=False,
+    )
 
-    embed.add_field(name="👤 Member",       value=f"{member.mention}\n`{member.id}`",                                     inline=True)
-    embed.add_field(name="🔢 Member Count", value=f"You're member **#{member_count:,}**",                                  inline=True)
-    embed.add_field(name="\u200b",          value="\u200b",                                                                inline=True)
-    embed.add_field(name="📅 Joined",       value=f"<t:{int(joined_at.timestamp())}:F>\n<t:{int(joined_at.timestamp())}:R>", inline=True)
-    embed.add_field(name="🎂 Account Age",  value=f"<t:{int(member.created_at.timestamp())}:R>",                            inline=True)
-    embed.add_field(name="\u200b",          value="\u200b",                                                                inline=True)
+    embed.add_field(
+        name="📅 Timeline",
+        value=(
+            "```\n"
+            f"Joined    {joined_at.strftime('%Y-%m-%d %H:%M UTC')}\n"
+            f"Created   {member.created_at.strftime('%Y-%m-%d %H:%M UTC')}\n"
+            f"Age       {account_age_days} day(s)\n"
+            "```"
+        ),
+        inline=False,
+    )
 
     if is_new_account:
         embed.add_field(
             name="⚠️ Heads Up",
-            value=f"This account is only **{account_age_days} day(s)** old.",
+            value=f"This account is only **{account_age_days} day(s)** old — worth keeping an eye on.",
             inline=False,
         )
         embed.color = C.WARNING
