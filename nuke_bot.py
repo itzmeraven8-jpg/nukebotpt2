@@ -1017,6 +1017,11 @@ SERVER_TEMPLATE = {
     "🛠️ Feedback": [
         ("text", "suggestions", "Tell us how to make the server better.", "suggestions"),
     ],
+    "🔐 Staff": [
+        ("text", "staff-chat", "Private staff discussion.", "staff_chat"),
+        ("text", "staff-logs", "Moderation logs and system actions.", "staff_logs"),
+        ("voice", "Staff Voice", "Private staff voice channel.", "staff_voice"),
+    ],
     "🔊 Voice Channels": [
         ("voice", "🔊 Lounge", "Hop in to talk.", "voice"),
         ("voice", "💤 AFK", "Where you get dumped when you walk away.", "afk_voice"),
@@ -1024,7 +1029,48 @@ SERVER_TEMPLATE = {
 }
 
 
-def _setup_overwrites(guild: discord.Guild, preset: str):
+async def _get_staff_role(guild: discord.Guild, reason: str):
+    role = discord.utils.get(guild.roles, name="Staff")
+    if role:
+        return role
+
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None or not me.guild_permissions.manage_roles:
+        return None
+
+    try:
+        return await guild.create_role(
+            name="Staff",
+            permissions=discord.Permissions.none(),
+            mentionable=False,
+            reason=reason,
+        )
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+
+def _category_overwrites(guild: discord.Guild, category_name: str, staff_role: discord.Role = None):
+    everyone = guild.default_role
+
+    if category_name == "🔐 Staff":
+        overwrites = {
+            everyone: discord.PermissionOverwrite(view_channel=False)
+        }
+
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+            )
+
+        return overwrites
+
+    return {
+        everyone: discord.PermissionOverwrite(view_channel=True)
+    }
+
+
+def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Role = None):
     everyone = guild.default_role
 
     if preset == "read_only":
@@ -1071,6 +1117,58 @@ def _setup_overwrites(guild: discord.Guild, preset: str):
                 create_public_threads=True,
             )
         }
+
+    if preset == "staff_chat":
+        overwrites = {
+            everyone: discord.PermissionOverwrite(view_channel=False)
+        }
+
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=True,
+                attach_files=True,
+                embed_links=True,
+            )
+
+        return overwrites
+
+    if preset == "staff_logs":
+        overwrites = {
+            everyone: discord.PermissionOverwrite(view_channel=False)
+        }
+
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=False,
+                add_reactions=False,
+                create_public_threads=False,
+                create_private_threads=False,
+            )
+
+        return overwrites
+
+    if preset == "staff_voice":
+        overwrites = {
+            everyone: discord.PermissionOverwrite(
+                view_channel=False,
+                connect=False,
+            )
+        }
+
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=True,
+                stream=True,
+                use_voice_activation=True,
+            )
+
+        return overwrites
 
     if preset == "afk_voice":
         return {
@@ -1144,11 +1242,13 @@ async def setup_server(interaction: discord.Interaction):
     skipped = []
     afk_channel = None
 
+    staff_role = await _get_staff_role(guild, f"Server setup by {interaction.user}")
+    if staff_role is None:
+        skipped.append("Staff role")
+
     for category_name, channel_specs in SERVER_TEMPLATE.items():
         category = _find_category(guild, category_name)
-        category_overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=True)
-        }
+        category_overwrites = _category_overwrites(guild, category_name, staff_role)
 
         try:
             if category is None:
@@ -1169,7 +1269,7 @@ async def setup_server(interaction: discord.Interaction):
             continue
 
         for channel_type, channel_name, topic, preset in channel_specs:
-            overwrites = _setup_overwrites(guild, preset)
+            overwrites = _setup_overwrites(guild, preset, staff_role)
             channel = _find_channel(guild, channel_name, channel_type)
 
             try:
