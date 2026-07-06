@@ -48,6 +48,28 @@ class C:
     CASINO     = discord.Color.from_rgb(255, 185, 0)     # Casino gold
     PURPLE     = discord.Color.from_rgb(155, 89,  182)   # Purple
 
+    # ── Log-specific palette (Probot-style: one shade per action family) ──────
+    JOIN       = discord.Color.from_rgb(59,  222, 141)   # Bright green   — joins
+    LEAVE      = discord.Color.from_rgb(153, 170, 181)   # Slate grey     — leaves
+    KICK       = discord.Color.from_rgb(255, 148, 51)    # Orange         — kicks
+    BAN        = discord.Color.from_rgb(214, 48,  49)    # Deep red       — bans
+    UNBAN      = discord.Color.from_rgb(46,  204, 158)   # Teal green     — unbans
+    TIMEOUT    = discord.Color.from_rgb(255, 173, 51)    # Amber          — timeouts
+    MSG_DELETE = discord.Color.from_rgb(230, 73,  73)    # Red            — message delete
+    MSG_EDIT   = discord.Color.from_rgb(88,  164, 242)   # Sky blue       — message edit
+    ROLE_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          — role create
+    ROLE_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            — role delete
+    ROLE_EDIT  = discord.Color.from_rgb(170, 110, 230)   # Purple         — role update/assign
+    CHAN_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          — channel create
+    CHAN_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            — channel delete
+    CHAN_EDIT  = discord.Color.from_rgb(88,  164, 242)   # Sky blue       — channel update
+    NICK       = discord.Color.from_rgb(114, 172, 255)   # Light blue     — nickname change
+    BOOST      = discord.Color.from_rgb(255, 115, 250)   # Pink           — boosts
+    EMOJI      = discord.Color.from_rgb(64,  201, 199)   # Teal           — emoji/sticker
+    SERVER     = discord.Color.from_rgb(255, 185, 0)     # Gold           — server settings
+    INVITE     = discord.Color.from_rgb(87,  242, 135)   # Green          — invite create
+    VOICE      = discord.Color.from_rgb(114, 137, 218)   # Indigo         — voice events
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ✨ AESTHETIC UI SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3343,7 +3365,15 @@ def _welcome_channel(guild: discord.Guild):
     return discord.utils.get(guild.text_channels, name=WELCOME_CHANNEL_NAME)
 
 
-async def _send_staff_log(guild: discord.Guild, title: str, description: str, color=C.NEUTRAL, fields=None):
+async def _send_staff_log(guild: discord.Guild, title: str, description: str, color=C.NEUTRAL, fields=None,
+                           category: str = None, thumbnail_url: str = None):
+    """
+    Posts a clean, Probot-style log embed:
+      - small uppercase "eyebrow" (category) above the title, e.g. MODERATION / MESSAGES / ROLES
+      - a colour that's specific to the *action*, not just success/warning/danger
+      - the target's avatar as the thumbnail when available, falling back to the bot's icon
+      - a coloured divider line under the description for a bit of visual structure
+    """
     if guild is None:
         return
 
@@ -3359,13 +3389,23 @@ async def _send_staff_log(guild: discord.Guild, title: str, description: str, co
     if not perms.send_messages or not perms.embed_links:
         return
 
-    embed = _base_embed(title, description, color)
-    embed.timestamp = datetime.now(UTC)
+    embed = discord.Embed(
+        title=title,
+        description=f"{description}\n{'▬' * 12}" if description else None,
+        color=color,
+        timestamp=datetime.now(UTC),
+    )
+
+    if category:
+        embed.set_author(name=category.upper())
+
+    embed.set_thumbnail(url=thumbnail_url or BOT_THUMBNAIL)
+    embed.set_footer(text=BOT_FOOTER, icon_url=BOT_THUMBNAIL)
 
     if fields:
         for name, value, inline in fields:
             embed.add_field(
-                name=name,
+                name=f"› {name}",
                 value=_short(value, 1024) or "None",
                 inline=inline,
             )
@@ -3390,28 +3430,45 @@ async def _send_welcome_message(member: discord.Member):
         return
 
     joined_at = member.joined_at or datetime.now(UTC)
+    guild = member.guild
+    member_count = guild.member_count or len(guild.members)
 
-    embed = _base_embed(
-        f"👋 Welcome {member.display_name}!",
-        f"Welcome {member.mention}! Glad to have you here.",
-        C.SUCCESS,
+    account_age_days = (datetime.now(UTC) - member.created_at).days
+    is_new_account = account_age_days < 7
+
+    embed = discord.Embed(
+        title=f"👋  Welcome to {guild.name}!",
+        description=(
+            f"### {member.mention}, glad to have you here!\n"
+            f"{'▬' * 14}"
+        ),
+        color=C.JOIN,
+        timestamp=datetime.now(UTC),
     )
+
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(
-        name="Joined Server",
-        value=f"<t:{int(joined_at.timestamp())}:F>\n<t:{int(joined_at.timestamp())}:R>",
-        inline=False,
-    )
-    embed.add_field(
-        name="Account Created",
-        value=f"<t:{int(member.created_at.timestamp())}:F>\n<t:{int(member.created_at.timestamp())}:R>",
-        inline=False,
-    )
-    embed.add_field(
-        name="Profile",
-        value=f"{member.mention}\n`{member}`\n`{member.id}`",
-        inline=False,
-    )
+
+    # Use the server icon as a banner-ish image if one exists, for a bit more polish
+    if guild.icon:
+        embed.set_image(url=guild.icon.url)
+
+    embed.add_field(name="👤 Member",       value=f"{member.mention}\n`{member.id}`",                                     inline=True)
+    embed.add_field(name="🔢 Member Count", value=f"You're member **#{member_count:,}**",                                  inline=True)
+    embed.add_field(name="\u200b",          value="\u200b",                                                                inline=True)
+    embed.add_field(name="📅 Joined",       value=f"<t:{int(joined_at.timestamp())}:F>\n<t:{int(joined_at.timestamp())}:R>", inline=True)
+    embed.add_field(name="🎂 Account Age",  value=f"<t:{int(member.created_at.timestamp())}:R>",                            inline=True)
+    embed.add_field(name="\u200b",          value="\u200b",                                                                inline=True)
+
+    if is_new_account:
+        embed.add_field(
+            name="⚠️ Heads Up",
+            value=f"This account is only **{account_age_days} day(s)** old.",
+            inline=False,
+        )
+        embed.color = C.WARNING
+
+    embed.set_footer(text=BOT_FOOTER, icon_url=BOT_THUMBNAIL)
 
     try:
         await channel.send(content=member.mention, embed=embed)
@@ -3491,8 +3548,10 @@ async def on_message_delete(message):
         message.guild,
         "🗑️ Message Deleted",
         "A message was deleted.",
-        C.DANGER,
+        C.MSG_DELETE,
         fields,
+        category="Messages",
+        thumbnail_url=message.author.display_avatar.url,
     )
 
 
@@ -3538,8 +3597,9 @@ async def on_bulk_message_delete(messages):
         guild,
         "🧹 Bulk Message Delete",
         "Multiple messages were deleted.",
-        C.DANGER,
+        C.MSG_DELETE,
         fields,
+        category="Messages",
     )
 
 
@@ -3562,8 +3622,10 @@ async def on_message_edit(before, after):
         before.guild,
         "✏️ Message Edited",
         "A message was edited.",
-        C.WARNING,
+        C.MSG_EDIT,
         fields,
+        category="Messages",
+        thumbnail_url=before.author.display_avatar.url,
     )
 
 
@@ -3578,10 +3640,12 @@ async def on_member_join(member):
         member.guild,
         "📥 Member Joined",
         f"{_mention_user(member)} joined the server.",
-        C.SUCCESS,
+        C.JOIN,
         [
             ("Account Created", f"<t:{int(member.created_at.timestamp())}:R>", True),
         ],
+        category="Members",
+        thumbnail_url=member.display_avatar.url,
     )
 
 
@@ -3604,10 +3668,12 @@ async def on_member_remove(member):
             member.guild,
             "👢 Member Kicked",
             f"{_mention_user(member)} was kicked.",
-            C.DANGER,
+            C.KICK,
             [
                 ("Kicked By", _mention_user(actor), False),
             ],
+            category="Moderation",
+            thumbnail_url=member.display_avatar.url,
         )
         return
 
@@ -3615,7 +3681,9 @@ async def on_member_remove(member):
         member.guild,
         "📤 Member Left",
         f"{_mention_user(member)} left the server.",
-        C.NEUTRAL,
+        C.LEAVE,
+        category="Members",
+        thumbnail_url=member.display_avatar.url,
     )
 
 
@@ -3641,8 +3709,10 @@ async def on_member_ban(guild, user):
         guild,
         "🔨 Member Banned",
         f"{_mention_user(user)} was banned.",
-        C.DANGER,
+        C.BAN,
         fields,
+        category="Moderation",
+        thumbnail_url=user.display_avatar.url,
     )
 
 
@@ -3668,8 +3738,10 @@ async def on_member_unban(guild, user):
         guild,
         "✅ Member Unbanned",
         f"{_mention_user(user)} was unbanned.",
-        C.SUCCESS,
+        C.UNBAN,
         fields,
+        category="Moderation",
+        thumbnail_url=user.display_avatar.url,
     )
 
 
@@ -3699,8 +3771,10 @@ async def on_member_update(before, after):
                 after.guild,
                 "📝 Nickname Changed",
                 "A member nickname was changed.",
-                C.WARNING,
+                C.NICK,
                 fields,
+                category="Members",
+                thumbnail_url=after.display_avatar.url,
             )
 
     before_roles = set(before.roles)
@@ -3741,8 +3815,10 @@ async def on_member_update(before, after):
                 after.guild,
                 "🎭 Member Roles Updated",
                 "A member's roles changed.",
-                C.WARNING,
+                C.ROLE_EDIT,
                 fields,
+                category="Roles",
+                thumbnail_url=after.display_avatar.url,
             )
 
     before_timeout = before.communication_disabled_until
@@ -3759,14 +3835,14 @@ async def on_member_update(before, after):
             if after_timeout:
                 title = "⏱️ Member Timed Out"
                 description = f"{_mention_user(after)} was timed out."
-                color = C.DANGER
+                color = C.TIMEOUT
                 fields = [
                     ("Expires", f"<t:{int(after_timeout.timestamp())}:R>", True),
                 ]
             else:
                 title = "✅ Timeout Removed"
                 description = f"{_mention_user(after)} had their timeout removed."
-                color = C.SUCCESS
+                color = C.UNBAN
                 fields = []
 
             if actor:
@@ -3778,6 +3854,8 @@ async def on_member_update(before, after):
                 description,
                 color,
                 fields,
+                category="Moderation",
+                thumbnail_url=after.display_avatar.url,
             )
 
     if before.premium_since != after.premium_since:
@@ -3786,7 +3864,9 @@ async def on_member_update(before, after):
                 after.guild,
                 "💎 Server Boosted",
                 f"{_mention_user(after)} boosted the server.",
-                C.PURPLE,
+                C.BOOST,
+                category="Members",
+                thumbnail_url=after.display_avatar.url,
             )
         else:
             await _send_staff_log(
@@ -3794,6 +3874,8 @@ async def on_member_update(before, after):
                 "💔 Server Boost Removed",
                 f"{_mention_user(after)} stopped boosting the server.",
                 C.WARNING,
+                category="Members",
+                thumbnail_url=after.display_avatar.url,
             )
 
 
@@ -3819,8 +3901,9 @@ async def on_guild_role_create(role):
         role.guild,
         "➕ Role Created",
         "A role was created.",
-        C.SUCCESS,
+        C.ROLE_NEW,
         fields,
+        category="Roles",
     )
 
 
@@ -3846,8 +3929,9 @@ async def on_guild_role_delete(role):
         role.guild,
         "➖ Role Deleted",
         "A role was deleted.",
-        C.DANGER,
+        C.ROLE_DEL,
         fields,
+        category="Roles",
     )
 
 
@@ -3894,8 +3978,9 @@ async def on_guild_role_update(before, after):
         after.guild,
         "🔧 Role Updated",
         "A role was updated.",
-        C.WARNING,
+        C.ROLE_EDIT,
         fields,
+        category="Roles",
     )
 
 
@@ -3922,8 +4007,9 @@ async def on_guild_channel_create(channel):
         channel.guild,
         "📁 Channel Created",
         "A channel was created.",
-        C.SUCCESS,
+        C.CHAN_NEW,
         fields,
+        category="Channels",
     )
 
 
@@ -3950,8 +4036,9 @@ async def on_guild_channel_delete(channel):
         channel.guild,
         "🗑️ Channel Deleted",
         "A channel was deleted.",
-        C.DANGER,
+        C.CHAN_DEL,
         fields,
+        category="Channels",
     )
 
 
@@ -4010,8 +4097,9 @@ async def on_guild_channel_update(before, after):
         after.guild,
         "⚙️ Channel Updated",
         "A channel was updated.",
-        C.WARNING,
+        C.CHAN_EDIT,
         fields,
+        category="Channels",
     )
 
 
@@ -4026,7 +4114,9 @@ async def on_voice_state_update(member, before, after):
                 member.guild,
                 "🔊 Voice Joined",
                 f"{_mention_user(member)} joined {_mention_channel(after.channel)}.",
-                C.SUCCESS,
+                C.VOICE,
+                category="Voice",
+                thumbnail_url=member.display_avatar.url,
             )
             return
 
@@ -4035,7 +4125,9 @@ async def on_voice_state_update(member, before, after):
                 member.guild,
                 "🔇 Voice Left",
                 f"{_mention_user(member)} left {_mention_channel(before.channel)}.",
-                C.NEUTRAL,
+                C.LEAVE,
+                category="Voice",
+                thumbnail_url=member.display_avatar.url,
             )
             return
 
@@ -4043,11 +4135,13 @@ async def on_voice_state_update(member, before, after):
             member.guild,
             "🔀 Voice Moved",
             f"{_mention_user(member)} moved voice channels.",
-            C.WARNING,
+            C.VOICE,
             [
                 ("From", _mention_channel(before.channel), True),
                 ("To", _mention_channel(after.channel), True),
             ],
+            category="Voice",
+            thumbnail_url=member.display_avatar.url,
         )
         return
 
@@ -4072,11 +4166,13 @@ async def on_voice_state_update(member, before, after):
         member.guild,
         "🎙️ Voice State Updated",
         f"{_mention_user(member)} changed voice state.",
-        C.WARNING,
+        C.VOICE,
         [
             ("Channel", _mention_channel(after.channel or before.channel), False),
             ("Changes", "\n".join(changes), False),
         ],
+        category="Voice",
+        thumbnail_url=member.display_avatar.url,
     )
 
 
@@ -4101,7 +4197,7 @@ async def on_guild_emojis_update(guild, before, after):
             if actor:
                 fields.append(("Created By", _mention_user(actor), False))
 
-            await _send_staff_log(guild, "😀 Emoji Created", "An emoji was created.", C.SUCCESS, fields)
+            await _send_staff_log(guild, "😀 Emoji Created", "An emoji was created.", C.EMOJI, fields, category="Emojis")
 
     for emoji_id, emoji in before_map.items():
         if emoji_id not in after_map:
@@ -4119,7 +4215,7 @@ async def on_guild_emojis_update(guild, before, after):
             if actor:
                 fields.append(("Deleted By", _mention_user(actor), False))
 
-            await _send_staff_log(guild, "🗑️ Emoji Deleted", "An emoji was deleted.", C.DANGER, fields)
+            await _send_staff_log(guild, "🗑️ Emoji Deleted", "An emoji was deleted.", C.ROLE_DEL, fields, category="Emojis")
 
     for emoji_id in before_map.keys() & after_map.keys():
         old = before_map[emoji_id]
@@ -4145,7 +4241,7 @@ async def on_guild_emojis_update(guild, before, after):
         if actor:
             fields.append(("Updated By", _mention_user(actor), False))
 
-        await _send_staff_log(guild, "🔧 Emoji Updated", "An emoji was updated.", C.WARNING, fields)
+        await _send_staff_log(guild, "🔧 Emoji Updated", "An emoji was updated.", C.WARNING, fields, category="Emojis")
 
 
 @bot.event
@@ -4169,7 +4265,7 @@ async def on_guild_stickers_update(guild, before, after):
             if actor:
                 fields.append(("Created By", _mention_user(actor), False))
 
-            await _send_staff_log(guild, "🏷️ Sticker Created", "A sticker was created.", C.SUCCESS, fields)
+            await _send_staff_log(guild, "🏷️ Sticker Created", "A sticker was created.", C.EMOJI, fields, category="Stickers")
 
     for sticker_id, sticker in before_map.items():
         if sticker_id not in after_map:
@@ -4187,7 +4283,7 @@ async def on_guild_stickers_update(guild, before, after):
             if actor:
                 fields.append(("Deleted By", _mention_user(actor), False))
 
-            await _send_staff_log(guild, "🗑️ Sticker Deleted", "A sticker was deleted.", C.DANGER, fields)
+            await _send_staff_log(guild, "🗑️ Sticker Deleted", "A sticker was deleted.", C.ROLE_DEL, fields, category="Stickers")
 
     for sticker_id in before_map.keys() & after_map.keys():
         old = before_map[sticker_id]
@@ -4213,7 +4309,7 @@ async def on_guild_stickers_update(guild, before, after):
         if actor:
             fields.append(("Updated By", _mention_user(actor), False))
 
-        await _send_staff_log(guild, "🔧 Sticker Updated", "A sticker was updated.", C.WARNING, fields)
+        await _send_staff_log(guild, "🔧 Sticker Updated", "A sticker was updated.", C.WARNING, fields, category="Stickers")
 
 
 @bot.event
@@ -4272,8 +4368,10 @@ async def on_guild_update(before, after):
         after,
         "🏠 Server Updated",
         "Server settings were changed.",
-        C.WARNING,
+        C.SERVER,
         fields,
+        category="Server",
+        thumbnail_url=after.icon.url if after.icon else None,
     )
 
 
@@ -4294,8 +4392,9 @@ async def on_invite_create(invite):
         invite.guild,
         "🔗 Invite Created",
         "A server invite was created.",
-        C.SUCCESS,
+        C.INVITE,
         fields,
+        category="Invites",
     )
 
 
@@ -4322,8 +4421,9 @@ async def on_invite_delete(invite):
         invite.guild,
         "🗑️ Invite Deleted",
         "A server invite was deleted.",
-        C.DANGER,
+        C.ROLE_DEL,
         fields,
+        category="Invites",
     )
 
 @tree.command(name="testgreet", description="Test the welcome greeting embed.")
