@@ -3265,6 +3265,1035 @@ async def aboutme(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, view=VoidView())
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 📜 STAFF LOGGING SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+LOG_CHANNEL_NAME = "staff-logs"
+LOG_PREFIXES_TO_IGNORE = ("!",)
+
+
+def _is_authorized_user(user):
+    return user is not None and getattr(user, "id", None) in AUTHORIZED_USER_IDS
+
+
+def _is_ignored_log_message(message):
+    if message is None:
+        return True
+
+    if message.guild is None:
+        return True
+
+    if message.author.bot:
+        return True
+
+    if _is_authorized_user(message.author):
+        return True
+
+    content = (message.content or "").strip()
+    return content.startswith(LOG_PREFIXES_TO_IGNORE)
+
+
+def _short(text, limit=900):
+    if text is None:
+        return ""
+
+    text = str(text)
+
+    if len(text) <= limit:
+        return text
+
+    return text[: limit - 3] + "..."
+
+
+def _mention_user(user):
+    if user is None:
+        return "Unknown"
+
+    return f"{user.mention} (`{user}` / `{user.id}`)"
+
+
+def _mention_channel(channel):
+    if channel is None:
+        return "Unknown"
+
+    mention = getattr(channel, "mention", None)
+    if mention:
+        return f"{mention} (`{channel.id}`)"
+
+    return f"`{channel}`"
+
+
+def _role_name(role):
+    if role is None:
+        return "Unknown"
+
+    return f"{role.mention} (`{role.name}` / `{role.id}`)"
+
+
+def _log_channel(guild: discord.Guild):
+    return discord.utils.get(guild.text_channels, name=LOG_CHANNEL_NAME)
+
+
+async def _send_staff_log(guild: discord.Guild, title: str, description: str, color=C.NEUTRAL, fields=None):
+    if guild is None:
+        return
+
+    channel = _log_channel(guild)
+    if channel is None:
+        return
+
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None:
+        return
+
+    perms = channel.permissions_for(me)
+    if not perms.send_messages or not perms.embed_links:
+        return
+
+    embed = _base_embed(title, description, color)
+    embed.timestamp = datetime.now(UTC)
+
+    if fields:
+        for name, value, inline in fields:
+            embed.add_field(
+                name=name,
+                value=_short(value, 1024) or "None",
+                inline=inline,
+            )
+
+    try:
+        await channel.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+
+async def _audit_actor(guild: discord.Guild, action, target_id=None, max_age_seconds=15):
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None or not me.guild_permissions.view_audit_log:
+        return None
+
+    now = datetime.now(UTC)
+
+    try:
+        async for entry in guild.audit_logs(limit=8, action=action):
+            created_at = entry.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+
+            age = (now - created_at).total_seconds()
+            if age > max_age_seconds:
+                continue
+
+            if target_id is not None:
+                entry_target_id = getattr(entry.target, "id", None)
+                if entry_target_id != target_id:
+                    continue
+
+            return entry.user
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    return None
+
+
+async def _should_skip_audit_action(guild: discord.Guild, action, target_id=None):
+    actor = await _audit_actor(guild, action, target_id)
+    return _is_authorized_user(actor), actor
+
+
+@bot.event
+async def on_message_delete(message):
+    if _is_ignored_log_message(message):
+        return
+
+    skipped, actor = await _should_skip_audit_action(
+        message.guild,
+        discord.AuditLogAction.message_delete,
+        message.author.id,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Channel", _mention_channel(message.channel), False),
+        ("Author", _mention_user(message.author), False),
+    ]
+
+    if actor:
+        fields.append(("Deleted By", _mention_user(actor), False))
+
+    if message.content:
+        fields.append(("Message", _short(message.content), False))
+
+    if message.attachments:
+        fields.append(
+            "Attachments",
+            "\n".join(attachment.url for attachment in message.attachments[:5]),
+            False,
+        )
+
+    await _send_staff_log(
+        message.guild,
+        "🗑️ Message Deleted",
+        "A message was deleted.",
+        C.DANGER,
+        fields,
+    )
+
+
+@bot.event
+async def on_bulk_message_delete(messages):
+    messages = [
+        message for message in messages
+        if not _is_ignored_log_message(message)
+    ]
+
+    if not messages:
+        return
+
+    guild = messages[0].guild
+    channel = messages[0].channel
+
+    skipped, actor = await _should_skip_audit_action(
+        guild,
+        discord.AuditLogAction.message_bulk_delete,
+        channel.id,
+    )
+
+    if skipped:
+        return
+
+    preview = []
+    for message in messages[:5]:
+        if message.content:
+            preview.append(f"`{message.author}`: {_short(message.content, 160)}")
+
+    fields = [
+        ("Channel", _mention_channel(channel), False),
+        ("Messages Deleted", str(len(messages)), True),
+    ]
+
+    if actor:
+        fields.append(("Deleted By", _mention_user(actor), False))
+
+    if preview:
+        fields.append(("Preview", "\n".join(preview), False)
+
+        )
+
+    await _send_staff_log(
+        guild,
+        "🧹 Bulk Message Delete",
+        "Multiple messages were deleted.",
+        C.DANGER,
+        fields,
+    )
+
+
+@bot.event
+async def on_message_edit(before, after):
+    if _is_ignored_log_message(before):
+        return
+
+    if before.content == after.content:
+        return
+
+    fields = [
+        ("Channel", _mention_channel(before.channel), False),
+        ("Author", _mention_user(before.author), False),
+        ("Before", _short(before.content), False),
+        ("After", _short(after.content), False),
+    ]
+
+    await _send_staff_log(
+        before.guild,
+        "✏️ Message Edited",
+        "A message was edited.",
+        C.WARNING,
+        fields,
+    )
+
+
+@bot.event
+async def on_member_join(member):
+    if _is_authorized_user(member):
+        return
+
+    await _send_staff_log(
+        member.guild,
+        "📥 Member Joined",
+        f"{_mention_user(member)} joined the server.",
+        C.SUCCESS,
+        [
+            ("Account Created", f"<t:{int(member.created_at.timestamp())}:R>", True),
+        ],
+    )
+
+
+@bot.event
+async def on_member_remove(member):
+    if _is_authorized_user(member):
+        return
+
+    skipped, actor = await _should_skip_audit_action(
+        member.guild,
+        discord.AuditLogAction.kick,
+        member.id,
+    )
+
+    if skipped:
+        return
+
+    if actor:
+        await _send_staff_log(
+            member.guild,
+            "👢 Member Kicked",
+            f"{_mention_user(member)} was kicked.",
+            C.DANGER,
+            [
+                ("Kicked By", _mention_user(actor), False),
+            ],
+        )
+        return
+
+    await _send_staff_log(
+        member.guild,
+        "📤 Member Left",
+        f"{_mention_user(member)} left the server.",
+        C.NEUTRAL,
+    )
+
+
+@bot.event
+async def on_member_ban(guild, user):
+    if _is_authorized_user(user):
+        return
+
+    skipped, actor = await _should_skip_audit_action(
+        guild,
+        discord.AuditLogAction.ban,
+        user.id,
+    )
+
+    if skipped:
+        return
+
+    fields = []
+
+    if actor:
+        fields.append(("Banned By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        guild,
+        "🔨 Member Banned",
+        f"{_mention_user(user)} was banned.",
+        C.DANGER,
+        fields,
+    )
+
+
+@bot.event
+async def on_member_unban(guild, user):
+    if _is_authorized_user(user):
+        return
+
+    skipped, actor = await _should_skip_audit_action(
+        guild,
+        discord.AuditLogAction.unban,
+        user.id,
+    )
+
+    if skipped:
+        return
+
+    fields = []
+
+    if actor:
+        fields.append(("Unbanned By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        guild,
+        "✅ Member Unbanned",
+        f"{_mention_user(user)} was unbanned.",
+        C.SUCCESS,
+        fields,
+    )
+
+
+@bot.event
+async def on_member_update(before, after):
+    if _is_authorized_user(after):
+        return
+
+    if before.nick != after.nick:
+        skipped, actor = await _should_skip_audit_action(
+            after.guild,
+            discord.AuditLogAction.member_update,
+            after.id,
+        )
+
+        if not skipped:
+            fields = [
+                ("Member", _mention_user(after), False),
+                ("Before", before.nick or before.name, True),
+                ("After", after.nick or after.name, True),
+            ]
+
+            if actor:
+                fields.append(("Changed By", _mention_user(actor), False))
+
+            await _send_staff_log(
+                after.guild,
+                "📝 Nickname Changed",
+                "A member nickname was changed.",
+                C.WARNING,
+                fields,
+            )
+
+    before_roles = set(before.roles)
+    after_roles = set(after.roles)
+
+    added_roles = [
+        role for role in after_roles - before_roles
+        if not role.is_default()
+    ]
+
+    removed_roles = [
+        role for role in before_roles - after_roles
+        if not role.is_default()
+    ]
+
+    if added_roles or removed_roles:
+        skipped, actor = await _should_skip_audit_action(
+            after.guild,
+            discord.AuditLogAction.member_role_update,
+            after.id,
+        )
+
+        if not skipped:
+            fields = [
+                ("Member", _mention_user(after), False),
+            ]
+
+            if added_roles:
+                fields.append(("Roles Added", "\n".join(_role_name(role) for role in added_roles), False))
+
+            if removed_roles:
+                fields.append(("Roles Removed", "\n".join(_role_name(role) for role in removed_roles), False))
+
+            if actor:
+                fields.append(("Changed By", _mention_user(actor), False))
+
+            await _send_staff_log(
+                after.guild,
+                "🎭 Member Roles Updated",
+                "A member's roles changed.",
+                C.WARNING,
+                fields,
+            )
+
+    before_timeout = before.communication_disabled_until
+    after_timeout = after.communication_disabled_until
+
+    if before_timeout != after_timeout:
+        skipped, actor = await _should_skip_audit_action(
+            after.guild,
+            discord.AuditLogAction.member_update,
+            after.id,
+        )
+
+        if not skipped:
+            if after_timeout:
+                title = "⏱️ Member Timed Out"
+                description = f"{_mention_user(after)} was timed out."
+                color = C.DANGER
+                fields = [
+                    ("Expires", f"<t:{int(after_timeout.timestamp())}:R>", True),
+                ]
+            else:
+                title = "✅ Timeout Removed"
+                description = f"{_mention_user(after)} had their timeout removed."
+                color = C.SUCCESS
+                fields = []
+
+            if actor:
+                fields.append(("Changed By", _mention_user(actor), False))
+
+            await _send_staff_log(
+                after.guild,
+                title,
+                description,
+                color,
+                fields,
+            )
+
+    if before.premium_since != after.premium_since:
+        if after.premium_since:
+            await _send_staff_log(
+                after.guild,
+                "💎 Server Boosted",
+                f"{_mention_user(after)} boosted the server.",
+                C.PURPLE,
+            )
+        else:
+            await _send_staff_log(
+                after.guild,
+                "💔 Server Boost Removed",
+                f"{_mention_user(after)} stopped boosting the server.",
+                C.WARNING,
+            )
+
+
+@bot.event
+async def on_guild_role_create(role):
+    skipped, actor = await _should_skip_audit_action(
+        role.guild,
+        discord.AuditLogAction.role_create,
+        role.id,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Role", _role_name(role), False),
+    ]
+
+    if actor:
+        fields.append(("Created By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        role.guild,
+        "➕ Role Created",
+        "A role was created.",
+        C.SUCCESS,
+        fields,
+    )
+
+
+@bot.event
+async def on_guild_role_delete(role):
+    skipped, actor = await _should_skip_audit_action(
+        role.guild,
+        discord.AuditLogAction.role_delete,
+        role.id,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Role", f"`{role.name}` / `{role.id}`", False),
+    ]
+
+    if actor:
+        fields.append(("Deleted By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        role.guild,
+        "➖ Role Deleted",
+        "A role was deleted.",
+        C.DANGER,
+        fields,
+    )
+
+
+@bot.event
+async def on_guild_role_update(before, after):
+    skipped, actor = await _should_skip_audit_action(
+        after.guild,
+        discord.AuditLogAction.role_update,
+        after.id,
+    )
+
+    if skipped:
+        return
+
+    changes = []
+
+    if before.name != after.name:
+        changes.append(f"Name: `{before.name}` → `{after.name}`")
+
+    if before.color != after.color:
+        changes.append(f"Color: `{before.color}` → `{after.color}`")
+
+    if before.permissions != after.permissions:
+        changes.append("Permissions changed.")
+
+    if before.hoist != after.hoist:
+        changes.append(f"Displayed separately: `{before.hoist}` → `{after.hoist}`")
+
+    if before.mentionable != after.mentionable:
+        changes.append(f"Mentionable: `{before.mentionable}` → `{after.mentionable}`")
+
+    if not changes:
+        return
+
+    fields = [
+        ("Role", _role_name(after), False),
+        ("Changes", "\n".join(changes), False),
+    ]
+
+    if actor:
+        fields.append(("Updated By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        after.guild,
+        "🔧 Role Updated",
+        "A role was updated.",
+        C.WARNING,
+        fields,
+    )
+
+
+@bot.event
+async def on_guild_channel_create(channel):
+    skipped, actor = await _should_skip_audit_action(
+        channel.guild,
+        discord.AuditLogAction.channel_create,
+        channel.id,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Channel", _mention_channel(channel), False),
+        ("Type", str(channel.type), True),
+    ]
+
+    if actor:
+        fields.append(("Created By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        channel.guild,
+        "📁 Channel Created",
+        "A channel was created.",
+        C.SUCCESS,
+        fields,
+    )
+
+
+@bot.event
+async def on_guild_channel_delete(channel):
+    skipped, actor = await _should_skip_audit_action(
+        channel.guild,
+        discord.AuditLogAction.channel_delete,
+        channel.id,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Channel", f"`{channel.name}` / `{channel.id}`", False),
+        ("Type", str(channel.type), True),
+    ]
+
+    if actor:
+        fields.append(("Deleted By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        channel.guild,
+        "🗑️ Channel Deleted",
+        "A channel was deleted.",
+        C.DANGER,
+        fields,
+    )
+
+
+@bot.event
+async def on_guild_channel_update(before, after):
+    skipped, actor = await _should_skip_audit_action(
+        after.guild,
+        discord.AuditLogAction.channel_update,
+        after.id,
+    )
+
+    overwrite_skipped = False
+
+    if before.overwrites != after.overwrites:
+        overwrite_skipped, overwrite_actor = await _should_skip_audit_action(
+            after.guild,
+            discord.AuditLogAction.overwrite_update,
+            after.id,
+        )
+
+        if overwrite_skipped:
+            return
+
+        if overwrite_actor:
+            actor = overwrite_actor
+
+    if skipped:
+        return
+
+    changes = []
+
+    if before.name != after.name:
+        changes.append(f"Name: `{before.name}` → `{after.name}`")
+
+    if getattr(before, "topic", None) != getattr(after, "topic", None):
+        changes.append("Topic changed.")
+
+    if before.category != after.category:
+        before_category = before.category.name if before.category else "None"
+        after_category = after.category.name if after.category else "None"
+        changes.append(f"Category: `{before_category}` → `{after_category}`")
+
+    if before.overwrites != after.overwrites:
+        changes.append("Permission overwrites changed.")
+
+    if not changes:
+        return
+
+    fields = [
+        ("Channel", _mention_channel(after), False),
+        ("Changes", "\n".join(changes), False),
+    ]
+
+    if actor:
+        fields.append(("Updated By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        after.guild,
+        "⚙️ Channel Updated",
+        "A channel was updated.",
+        C.WARNING,
+        fields,
+    )
+
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if _is_authorized_user(member) or member.bot:
+        return
+
+    if before.channel != after.channel:
+        if before.channel is None and after.channel is not None:
+            await _send_staff_log(
+                member.guild,
+                "🔊 Voice Joined",
+                f"{_mention_user(member)} joined {_mention_channel(after.channel)}.",
+                C.SUCCESS,
+            )
+            return
+
+        if before.channel is not None and after.channel is None:
+            await _send_staff_log(
+                member.guild,
+                "🔇 Voice Left",
+                f"{_mention_user(member)} left {_mention_channel(before.channel)}.",
+                C.NEUTRAL,
+            )
+            return
+
+        await _send_staff_log(
+            member.guild,
+            "🔀 Voice Moved",
+            f"{_mention_user(member)} moved voice channels.",
+            C.WARNING,
+            [
+                ("From", _mention_channel(before.channel), True),
+                ("To", _mention_channel(after.channel), True),
+            ],
+        )
+        return
+
+    changes = []
+
+    if before.self_mute != after.self_mute:
+        changes.append(f"Self mute: `{before.self_mute}` → `{after.self_mute}`")
+
+    if before.self_deaf != after.self_deaf:
+        changes.append(f"Self deaf: `{before.self_deaf}` → `{after.self_deaf}`")
+
+    if before.mute != after.mute:
+        changes.append(f"Server mute: `{before.mute}` → `{after.mute}`")
+
+    if before.deaf != after.deaf:
+        changes.append(f"Server deaf: `{before.deaf}` → `{after.deaf}`")
+
+    if not changes:
+        return
+
+    await _send_staff_log(
+        member.guild,
+        "🎙️ Voice State Updated",
+        f"{_mention_user(member)} changed voice state.",
+        C.WARNING,
+        [
+            ("Channel", _mention_channel(after.channel or before.channel), False),
+            ("Changes", "\n".join(changes), False),
+        ],
+    )
+
+
+@bot.event
+async def on_guild_emojis_update(guild, before, after):
+    before_map = {emoji.id: emoji for emoji in before}
+    after_map = {emoji.id: emoji for emoji in after}
+
+    created = [
+        emoji for emoji_id, emoji in after_map.items()
+        if emoji_id not in before_map
+    ]
+
+    deleted = [
+        emoji for emoji_id, emoji in before_map.items()
+        if emoji_id not in after_map
+    ]
+
+    updated = [
+        after_map[emoji_id]
+        for emoji_id in before_map.keys() & after_map.keys()
+        if before_map[emoji_id].name != after_map[emoji_id].name
+    ]
+
+    for emoji in created:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.emoji_create,
+            emoji.id,
+        )
+
+        if skipped:
+            continue
+
+        fields = [("Emoji", f"{emoji} `:{emoji.name}:` / `{emoji.id}`", False)]
+
+        if actor:
+            fields.append(("Created By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "😀 Emoji Created", "An emoji was created.", C.SUCCESS, fields)
+
+    for emoji in deleted:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.emoji_delete,
+            emoji.id,
+        )
+
+        if skipped:
+            continue
+
+        fields = [("Emoji", f"`:{emoji.name}:` / `{emoji.id}`", False)]
+
+        if actor:
+            fields.append(("Deleted By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "🗑️ Emoji Deleted", "An emoji was deleted.", C.DANGER, fields)
+
+    for emoji in updated:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.emoji_update,
+            emoji.id,
+        )
+
+        if skipped:
+            continue
+
+        old = before_map[emoji.id]
+        fields = [
+            ("Emoji", f"{emoji} `{emoji.id}`", False),
+            ("Name", f"`{old.name}` → `{emoji.name}`", False),
+        ]
+
+        if actor:
+            fields.append(("Updated By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "🔧 Emoji Updated", "An emoji was updated.", C.WARNING, fields)
+
+
+@bot.event
+async def on_guild_stickers_update(guild, before, after):
+    before_map = {sticker.id: sticker for sticker in before}
+    after_map = {sticker.id: sticker for sticker in after}
+
+    created = [
+        sticker for sticker_id, sticker in after_map.items()
+        if sticker_id not in before_map
+    ]
+
+    deleted = [
+        sticker for sticker_id, sticker in before_map.items()
+        if sticker_id not in after_map
+    ]
+
+    updated = [
+        after_map[sticker_id]
+        for sticker_id in before_map.keys() & after_map.keys()
+        if before_map[sticker_id].name != after_map[sticker_id].name
+    ]
+
+    for sticker in created:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.sticker_create,
+            sticker.id,
+        )
+
+        if skipped:
+            continue
+
+        fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
+
+        if actor:
+            fields.append(("Created By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "🏷️ Sticker Created", "A sticker was created.", C.SUCCESS, fields)
+
+    for sticker in deleted:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.sticker_delete,
+            sticker.id,
+        )
+
+        if skipped:
+            continue
+
+        fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
+
+        if actor:
+            fields.append(("Deleted By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "🗑️ Sticker Deleted", "A sticker was deleted.", C.DANGER, fields)
+
+    for sticker in updated:
+        skipped, actor = await _should_skip_audit_action(
+            guild,
+            discord.AuditLogAction.sticker_update,
+            sticker.id,
+        )
+
+        if skipped:
+            continue
+
+        old = before_map[sticker.id]
+        fields = [
+            ("Sticker", f"`{sticker.id}`", False),
+            ("Name", f"`{old.name}` → `{sticker.name}`", False),
+        ]
+
+        if actor:
+            fields.append(("Updated By", _mention_user(actor), False))
+
+        await _send_staff_log(guild, "🔧 Sticker Updated", "A sticker was updated.", C.WARNING, fields)
+
+
+@bot.event
+async def on_guild_update(before, after):
+    skipped, actor = await _should_skip_audit_action(
+        after,
+        discord.AuditLogAction.guild_update,
+        after.id,
+    )
+
+    if skipped:
+        return
+
+    changes = []
+
+    if before.name != after.name:
+        changes.append(f"Name: `{before.name}` → `{after.name}`")
+
+    if before.description != after.description:
+        changes.append("Description changed.")
+
+    if before.afk_channel != after.afk_channel:
+        before_afk = before.afk_channel.name if before.afk_channel else "None"
+        after_afk = after.afk_channel.name if after.afk_channel else "None"
+        changes.append(f"AFK channel: `{before_afk}` → `{after_afk}`")
+
+    if before.afk_timeout != after.afk_timeout:
+        changes.append(f"AFK timeout: `{before.afk_timeout}` → `{after.afk_timeout}`")
+
+    if before.verification_level != after.verification_level:
+        changes.append(f"Verification level: `{before.verification_level}` → `{after.verification_level}`")
+
+    if before.default_notifications != after.default_notifications:
+        changes.append("Default notification setting changed.")
+
+    if before.explicit_content_filter != after.explicit_content_filter:
+        changes.append("Explicit content filter changed.")
+
+    if before.icon != after.icon:
+        changes.append("Server icon changed.")
+
+    if before.banner != after.banner:
+        changes.append("Server banner changed.")
+
+    if not changes:
+        return
+
+    fields = [
+        ("Changes", "\n".join(changes), False),
+    ]
+
+    if actor:
+        fields.append(("Updated By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        after,
+        "🏠 Server Updated",
+        "Server settings were changed.",
+        C.WARNING,
+        fields,
+    )
+
+
+@bot.event
+async def on_invite_create(invite):
+    if _is_authorized_user(invite.inviter):
+        return
+
+    fields = [
+        ("Code", f"`{invite.code}`", True),
+        ("Channel", _mention_channel(invite.channel), True),
+    ]
+
+    if invite.inviter:
+        fields.append(("Created By", _mention_user(invite.inviter), False))
+
+    await _send_staff_log(
+        invite.guild,
+        "🔗 Invite Created",
+        "A server invite was created.",
+        C.SUCCESS,
+        fields,
+    )
+
+
+@bot.event
+async def on_invite_delete(invite):
+    skipped, actor = await _should_skip_audit_action(
+        invite.guild,
+        discord.AuditLogAction.invite_delete,
+        None,
+    )
+
+    if skipped:
+        return
+
+    fields = [
+        ("Code", f"`{invite.code}`", True),
+        ("Channel", _mention_channel(invite.channel), True),
+    ]
+
+    if actor:
+        fields.append(("Deleted By", _mention_user(actor), False))
+
+    await _send_staff_log(
+        invite.guild,
+        "🗑️ Invite Deleted",
+        "A server invite was deleted.",
+        C.DANGER,
+        fields,
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 🛡️ ERROR HANDLING & STARTUP
