@@ -3266,10 +3266,11 @@ async def aboutme(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=VoidView())
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 📜 STAFF LOGGING SYSTEM
+# 📜 STAFF LOGGING + WELCOME SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
 
 LOG_CHANNEL_NAME = "staff-logs"
+WELCOME_CHANNEL_NAME = "welcome"
 LOG_PREFIXES_TO_IGNORE = ("!",)
 
 
@@ -3288,6 +3289,9 @@ def _is_ignored_log_message(message):
         return True
 
     if _is_authorized_user(message.author):
+        return True
+
+    if getattr(message.channel, "name", None) == LOG_CHANNEL_NAME:
         return True
 
     content = (message.content or "").strip()
@@ -3335,6 +3339,10 @@ def _log_channel(guild: discord.Guild):
     return discord.utils.get(guild.text_channels, name=LOG_CHANNEL_NAME)
 
 
+def _welcome_channel(guild: discord.Guild):
+    return discord.utils.get(guild.text_channels, name=WELCOME_CHANNEL_NAME)
+
+
 async def _send_staff_log(guild: discord.Guild, title: str, description: str, color=C.NEUTRAL, fields=None):
     if guild is None:
         return
@@ -3364,6 +3372,49 @@ async def _send_staff_log(guild: discord.Guild, title: str, description: str, co
 
     try:
         await channel.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+
+async def _send_welcome_message(member: discord.Member):
+    channel = _welcome_channel(member.guild)
+    if channel is None:
+        return
+
+    me = member.guild.me or member.guild.get_member(bot.user.id)
+    if me is None:
+        return
+
+    perms = channel.permissions_for(me)
+    if not perms.send_messages or not perms.embed_links:
+        return
+
+    joined_at = member.joined_at or datetime.now(UTC)
+
+    embed = _base_embed(
+        f"👋 Welcome {member.display_name}!",
+        f"Welcome {member.mention}! Glad to have you here.",
+        C.SUCCESS,
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(
+        name="Joined Server",
+        value=f"<t:{int(joined_at.timestamp())}:F>\n<t:{int(joined_at.timestamp())}:R>",
+        inline=False,
+    )
+    embed.add_field(
+        name="Account Created",
+        value=f"<t:{int(member.created_at.timestamp())}:F>\n<t:{int(member.created_at.timestamp())}:R>",
+        inline=False,
+    )
+    embed.add_field(
+        name="Profile",
+        value=f"{member.mention}\n`{member}`\n`{member.id}`",
+        inline=False,
+    )
+
+    try:
+        await channel.send(content=member.mention, embed=embed)
     except (discord.Forbidden, discord.HTTPException):
         pass
 
@@ -3429,9 +3480,11 @@ async def on_message_delete(message):
 
     if message.attachments:
         fields.append(
-            "Attachments",
-            "\n".join(attachment.url for attachment in message.attachments[:5]),
-            False,
+            (
+                "Attachments",
+                "\n".join(attachment.url for attachment in message.attachments[:5]),
+                False,
+            )
         )
 
     await _send_staff_log(
@@ -3479,9 +3532,7 @@ async def on_bulk_message_delete(messages):
         fields.append(("Deleted By", _mention_user(actor), False))
 
     if preview:
-        fields.append(("Preview", "\n".join(preview), False)
-
-        )
+        fields.append(("Preview", "\n".join(preview), False))
 
     await _send_staff_log(
         guild,
@@ -3518,6 +3569,8 @@ async def on_message_edit(before, after):
 
 @bot.event
 async def on_member_join(member):
+    await _send_welcome_message(member)
+
     if _is_authorized_user(member):
         return
 
@@ -3581,7 +3634,6 @@ async def on_member_ban(guild, user):
         return
 
     fields = []
-
     if actor:
         fields.append(("Banned By", _mention_user(actor), False))
 
@@ -3609,7 +3661,6 @@ async def on_member_unban(guild, user):
         return
 
     fields = []
-
     if actor:
         fields.append(("Unbanned By", _mention_user(actor), False))
 
@@ -3912,8 +3963,6 @@ async def on_guild_channel_update(before, after):
         after.id,
     )
 
-    overwrite_skipped = False
-
     if before.overwrites != after.overwrites:
         overwrite_skipped, overwrite_actor = await _should_skip_audit_action(
             after.guild,
@@ -4036,70 +4085,61 @@ async def on_guild_emojis_update(guild, before, after):
     before_map = {emoji.id: emoji for emoji in before}
     after_map = {emoji.id: emoji for emoji in after}
 
-    created = [
-        emoji for emoji_id, emoji in after_map.items()
-        if emoji_id not in before_map
-    ]
+    for emoji_id, emoji in after_map.items():
+        if emoji_id not in before_map:
+            skipped, actor = await _should_skip_audit_action(
+                guild,
+                discord.AuditLogAction.emoji_create,
+                emoji.id,
+            )
 
-    deleted = [
-        emoji for emoji_id, emoji in before_map.items()
-        if emoji_id not in after_map
-    ]
+            if skipped:
+                continue
 
-    updated = [
-        after_map[emoji_id]
-        for emoji_id in before_map.keys() & after_map.keys()
-        if before_map[emoji_id].name != after_map[emoji_id].name
-    ]
+            fields = [("Emoji", f"{emoji} `:{emoji.name}:` / `{emoji.id}`", False)]
 
-    for emoji in created:
-        skipped, actor = await _should_skip_audit_action(
-            guild,
-            discord.AuditLogAction.emoji_create,
-            emoji.id,
-        )
+            if actor:
+                fields.append(("Created By", _mention_user(actor), False))
 
-        if skipped:
+            await _send_staff_log(guild, "😀 Emoji Created", "An emoji was created.", C.SUCCESS, fields)
+
+    for emoji_id, emoji in before_map.items():
+        if emoji_id not in after_map:
+            skipped, actor = await _should_skip_audit_action(
+                guild,
+                discord.AuditLogAction.emoji_delete,
+                emoji.id,
+            )
+
+            if skipped:
+                continue
+
+            fields = [("Emoji", f"`:{emoji.name}:` / `{emoji.id}`", False)]
+
+            if actor:
+                fields.append(("Deleted By", _mention_user(actor), False))
+
+            await _send_staff_log(guild, "🗑️ Emoji Deleted", "An emoji was deleted.", C.DANGER, fields)
+
+    for emoji_id in before_map.keys() & after_map.keys():
+        old = before_map[emoji_id]
+        new = after_map[emoji_id]
+
+        if old.name == new.name:
             continue
 
-        fields = [("Emoji", f"{emoji} `:{emoji.name}:` / `{emoji.id}`", False)]
-
-        if actor:
-            fields.append(("Created By", _mention_user(actor), False))
-
-        await _send_staff_log(guild, "😀 Emoji Created", "An emoji was created.", C.SUCCESS, fields)
-
-    for emoji in deleted:
-        skipped, actor = await _should_skip_audit_action(
-            guild,
-            discord.AuditLogAction.emoji_delete,
-            emoji.id,
-        )
-
-        if skipped:
-            continue
-
-        fields = [("Emoji", f"`:{emoji.name}:` / `{emoji.id}`", False)]
-
-        if actor:
-            fields.append(("Deleted By", _mention_user(actor), False))
-
-        await _send_staff_log(guild, "🗑️ Emoji Deleted", "An emoji was deleted.", C.DANGER, fields)
-
-    for emoji in updated:
         skipped, actor = await _should_skip_audit_action(
             guild,
             discord.AuditLogAction.emoji_update,
-            emoji.id,
+            new.id,
         )
 
         if skipped:
             continue
 
-        old = before_map[emoji.id]
         fields = [
-            ("Emoji", f"{emoji} `{emoji.id}`", False),
-            ("Name", f"`{old.name}` → `{emoji.name}`", False),
+            ("Emoji", f"{new} `{new.id}`", False),
+            ("Name", f"`{old.name}` → `{new.name}`", False),
         ]
 
         if actor:
@@ -4113,70 +4153,61 @@ async def on_guild_stickers_update(guild, before, after):
     before_map = {sticker.id: sticker for sticker in before}
     after_map = {sticker.id: sticker for sticker in after}
 
-    created = [
-        sticker for sticker_id, sticker in after_map.items()
-        if sticker_id not in before_map
-    ]
+    for sticker_id, sticker in after_map.items():
+        if sticker_id not in before_map:
+            skipped, actor = await _should_skip_audit_action(
+                guild,
+                discord.AuditLogAction.sticker_create,
+                sticker.id,
+            )
 
-    deleted = [
-        sticker for sticker_id, sticker in before_map.items()
-        if sticker_id not in after_map
-    ]
+            if skipped:
+                continue
 
-    updated = [
-        after_map[sticker_id]
-        for sticker_id in before_map.keys() & after_map.keys()
-        if before_map[sticker_id].name != after_map[sticker_id].name
-    ]
+            fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
 
-    for sticker in created:
-        skipped, actor = await _should_skip_audit_action(
-            guild,
-            discord.AuditLogAction.sticker_create,
-            sticker.id,
-        )
+            if actor:
+                fields.append(("Created By", _mention_user(actor), False))
 
-        if skipped:
+            await _send_staff_log(guild, "🏷️ Sticker Created", "A sticker was created.", C.SUCCESS, fields)
+
+    for sticker_id, sticker in before_map.items():
+        if sticker_id not in after_map:
+            skipped, actor = await _should_skip_audit_action(
+                guild,
+                discord.AuditLogAction.sticker_delete,
+                sticker.id,
+            )
+
+            if skipped:
+                continue
+
+            fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
+
+            if actor:
+                fields.append(("Deleted By", _mention_user(actor), False))
+
+            await _send_staff_log(guild, "🗑️ Sticker Deleted", "A sticker was deleted.", C.DANGER, fields)
+
+    for sticker_id in before_map.keys() & after_map.keys():
+        old = before_map[sticker_id]
+        new = after_map[sticker_id]
+
+        if old.name == new.name:
             continue
 
-        fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
-
-        if actor:
-            fields.append(("Created By", _mention_user(actor), False))
-
-        await _send_staff_log(guild, "🏷️ Sticker Created", "A sticker was created.", C.SUCCESS, fields)
-
-    for sticker in deleted:
-        skipped, actor = await _should_skip_audit_action(
-            guild,
-            discord.AuditLogAction.sticker_delete,
-            sticker.id,
-        )
-
-        if skipped:
-            continue
-
-        fields = [("Sticker", f"`{sticker.name}` / `{sticker.id}`", False)]
-
-        if actor:
-            fields.append(("Deleted By", _mention_user(actor), False))
-
-        await _send_staff_log(guild, "🗑️ Sticker Deleted", "A sticker was deleted.", C.DANGER, fields)
-
-    for sticker in updated:
         skipped, actor = await _should_skip_audit_action(
             guild,
             discord.AuditLogAction.sticker_update,
-            sticker.id,
+            new.id,
         )
 
         if skipped:
             continue
 
-        old = before_map[sticker.id]
         fields = [
-            ("Sticker", f"`{sticker.id}`", False),
-            ("Name", f"`{old.name}` → `{sticker.name}`", False),
+            ("Sticker", f"`{new.id}`", False),
+            ("Name", f"`{old.name}` → `{new.name}`", False),
         ]
 
         if actor:
@@ -4294,7 +4325,7 @@ async def on_invite_delete(invite):
         C.DANGER,
         fields,
     )
-
+    
 # ══════════════════════════════════════════════════════════════════════════════
 # 🛡️ ERROR HANDLING & STARTUP
 # ══════════════════════════════════════════════════════════════════════════════
