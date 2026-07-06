@@ -4325,7 +4325,8 @@ async def on_invite_delete(invite):
         C.DANGER,
         fields,
     )
-    @tree.command(name="testgreet", description="Test the welcome greeting embed.")
+
+@tree.command(name="testgreet", description="Test the welcome greeting embed.")
 @app_commands.describe(member="Member to preview the welcome greet for")
 async def testgreet(interaction: discord.Interaction, member: discord.Member = None):
     if not _mod_check(interaction, "manage_channels"):
