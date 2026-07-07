@@ -1165,7 +1165,7 @@ async def ephemeral_help(interaction: discord.Interaction):
         )
         return
 
-    embed = _base_embed("💥  Destructive / Mass Action Commands", color=C.DANGER)
+    embed = _base_embed("💥  E410 — Destructive / Mass Action Commands", color=C.DANGER)
 
     embed.add_field(
         name="⚡ ── AVAILABLE IN THE DROPDOWN BELOW ── ⚡",
@@ -1211,7 +1211,7 @@ async def ephemeral_help(interaction: discord.Interaction):
         ),
         inline=False,
     )
-    embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · happy nuking man.")
+    embed.set_footer(text="E410 · Authorized users only · every action asks for confirmation · happy nuking man.")
 
     await interaction.response.send_message(embed=embed, view=EphemeralActionView(interaction.user.id), ephemeral=True)
 
