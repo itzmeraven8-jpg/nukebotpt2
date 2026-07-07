@@ -5,6 +5,8 @@ import asyncio
 import os
 import random
 import json
+import re
+import aiohttp
 from datetime import datetime, timedelta, UTC
 import threading
 
@@ -186,6 +188,29 @@ def update_balance_with_stats(user_id, amount):
     save_economy(data)
     return data[uid]["balance"]
 
+def transfer_balance(sender_id, receiver_id, amount):
+    """Move money between two users in a single load/save cycle so the transfer is atomic."""
+    data = load_economy()
+    sender_uid = str(sender_id)
+    receiver_uid = str(receiver_id)
+    for uid in (sender_uid, receiver_uid):
+        if uid not in data:
+            data[uid] = {
+                "balance": STARTING_BALANCE,
+                "daily": None,
+                "wins": 0,
+                "losses": 0,
+                "total_won": 0,
+                "total_lost": 0,
+                "job_level": 0,
+                "work_days": 0,
+                "time_skipped": 0
+            }
+    data[sender_uid]["balance"] -= amount
+    data[receiver_uid]["balance"] += amount
+    save_economy(data)
+    return data[sender_uid]["balance"]
+
 def can_claim_daily(user_id):
     data = load_economy()
     uid = str(user_id)
@@ -355,7 +380,7 @@ def update_career(user_id, field, value):
     uid = str(user_id)
 
     if uid not in data:
-        data[uid] = {"job_level": 0, "work_days": 0}
+        data[uid] = {"job_level": 0, "work_days": 0, "is_in_school": True}
 
     data[uid][field] = value
     save_career(data)
@@ -418,6 +443,53 @@ async def confirm(ctx, action: str) -> bool:
         return False
 
 
+def _normalize_answer(text: str) -> str:
+    """Loosen matching so punctuation/spacing differences (e.g. 'Washington D.C.' vs
+    'washington dc') don't count as wrong answers."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+async def dm_confirm(ctx, action_desc: str) -> bool:
+    """Shared 'type CONFIRM in DM' flow used by the rename/name/icon commands,
+    so the confirmation logic lives in one place instead of being copy-pasted."""
+    def dm_check(m):
+        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
+
+    await ctx.author.send(embed=_base_embed(
+        "⚠️  Confirm Action",
+        f"You are about to {action_desc}.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
+        C.WARNING,
+    ))
+    try:
+        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
+        if confirm_reply.content.strip().upper() != "CONFIRM":
+            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
+            return False
+        return True
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        return False
+
+
+async def dm_prompt(ctx, prompt_title: str, prompt_text: str):
+    """Shared 'ask a question via DM' flow. Returns the reply text, or None on timeout/DM failure."""
+    def dm_check(m):
+        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        await ctx.author.send(embed=_base_embed(prompt_title, prompt_text, C.WARNING))
+    except discord.Forbidden:
+        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+        return None
+
+    try:
+        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
+        return reply.content.strip()
+    except asyncio.TimeoutError:
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        return None
+
+
 async def send_result(ctx, results: list[str], delete_after=None):
     embed = _base_embed(
         "💥  Operation Complete",
@@ -439,7 +511,7 @@ async def nuke_channels(ctx):
         return
     guild = ctx.guild
     count = 0
-    for channel in guild.channels:
+    for channel in list(guild.channels):
         try:
             await channel.delete(reason="Nuke: channels")
             count += 1
@@ -462,7 +534,7 @@ async def nuke_roles(ctx):
         return
     guild = ctx.guild
     count = 0
-    for role in guild.roles:
+    for role in list(guild.roles):
         if role.is_default() or role.managed:
             continue
         try:
@@ -883,39 +955,16 @@ async def rename_all_channels(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
         return
-    try:
-        await ctx.author.send(embed=_base_embed("✏️  Rename All Channels", "What would you like to rename all channels to? Reply here with the name.", C.WARNING))
-    except discord.Forbidden:
-        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+    name = await dm_prompt(ctx, "✏️  Rename All Channels", "What would you like to rename all channels to? Reply here with the name.")
+    if name is None:
         return
 
-    def dm_check(m):
-        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
-
-    try:
-        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
-        name = reply.content.strip()
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
-        return
-
-    await ctx.author.send(embed=_base_embed(
-        "⚠️  Confirm Action",
-        f"You are about to rename **ALL** channels to `{name}`.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
-        C.WARNING,
-    ))
-    try:
-        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
-        if confirm_reply.content.strip().upper() != "CONFIRM":
-            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
-            return
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+    if not await dm_confirm(ctx, f"rename **ALL** channels to `{name}`"):
         return
 
     guild = ctx.guild
     count = 0
-    for channel in guild.channels:
+    for channel in list(guild.channels):
         try:
             await channel.edit(name=name, reason=f"Mass rename by {ctx.author}")
             count += 1
@@ -929,34 +978,11 @@ async def change_server_name(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
         return
-    try:
-        await ctx.author.send(embed=_base_embed("✏️  Change Server Name", "What would you like to rename the server to? Reply here with the name.", C.WARNING))
-    except discord.Forbidden:
-        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+    name = await dm_prompt(ctx, "✏️  Change Server Name", "What would you like to rename the server to? Reply here with the name.")
+    if name is None:
         return
 
-    def dm_check(m):
-        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
-
-    try:
-        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
-        name = reply.content.strip()
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
-        return
-
-    await ctx.author.send(embed=_base_embed(
-        "⚠️  Confirm Action",
-        f"You are about to change the server name to **{name}**.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
-        C.WARNING,
-    ))
-    try:
-        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
-        if confirm_reply.content.strip().upper() != "CONFIRM":
-            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
-            return
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+    if not await dm_confirm(ctx, f"change the server name to **{name}**"):
         return
 
     old_name = ctx.guild.name
@@ -971,37 +997,13 @@ async def change_server_icon(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
         return
-    try:
-        await ctx.author.send(embed=_base_embed("🖼️  Change Server Icon", "Please reply with the **image URL** you want to use as the new server icon.", C.WARNING))
-    except discord.Forbidden:
-        await ctx.send("❌ I couldn't DM you. Please enable DMs from server members.", delete_after=5)
+    url = await dm_prompt(ctx, "🖼️  Change Server Icon", "Please reply with the **image URL** you want to use as the new server icon.")
+    if url is None:
         return
 
-    def dm_check(m):
-        return m.author == ctx.author and isinstance(m.channel, discord.DMChannel)
-
-    try:
-        reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
-        url = reply.content.strip()
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+    if not await dm_confirm(ctx, "change the **server icon** to the provided URL"):
         return
 
-    await ctx.author.send(embed=_base_embed(
-        "⚠️  Confirm Action",
-        "You are about to change the **server icon** to the provided URL.\n\nType **CONFIRM** to proceed or anything else to cancel. (15 seconds)",
-        C.WARNING,
-    ))
-    try:
-        confirm_reply = await bot.wait_for("message", timeout=15.0, check=dm_check)
-        if confirm_reply.content.strip().upper() != "CONFIRM":
-            await ctx.author.send(embed=_base_embed("❌  Cancelled", "Action cancelled.", C.NEUTRAL))
-            return
-    except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
-        return
-
-    import aiohttp
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -1905,14 +1907,13 @@ async def give(interaction: discord.Interaction, user: discord.Member, amount: i
             embed=_base_embed("❌  Insufficient Funds", f"You only have **${bal:,}**!", C.DANGER), ephemeral=True
         )
         return
-    update_balance(interaction.user.id, -amount)
-    update_balance(user.id, amount)
+    sender_new_bal = transfer_balance(interaction.user.id, user.id, amount)
     embed = _base_embed(
         "💸  Money Sent!",
         f"{interaction.user.mention} sent **${amount:,}** to {user.mention}!",
         C.SUCCESS,
     )
-    embed.add_field(name="Your new balance", value=f"**${get_balance(interaction.user.id):,}**", inline=True)
+    embed.add_field(name="Your new balance", value=f"**${sender_new_bal:,}**", inline=True)
     await interaction.response.send_message(embed=embed)
 
 
@@ -2391,7 +2392,7 @@ async def trivia(interaction: discord.Interaction, difficulty: str = "easy"):
         msg = await bot.wait_for("message", timeout=30.0, check=check)
         if view.answered: return
         view.answered = True
-        if msg.content.lower().strip() == q["a"]:
+        if _normalize_answer(msg.content) == _normalize_answer(q["a"]):
             new_bal = update_balance_with_stats(interaction.user.id, q["reward"])
             result_embed = _base_embed(
                 "✅  Correct!",
@@ -2503,7 +2504,7 @@ class BlackjackView(discord.ui.View):
     async def double_down(self, interaction, button):
         if interaction.user != self.user:
             await interaction.response.send_message("❌ This isn't your game!", ephemeral=True); return
-        if get_balance(self.user.id) < self.bet:
+        if get_balance(self.user.id) < self.bet * 2:
             await interaction.response.send_message("❌ Not enough balance to double down!", ephemeral=True); return
         self.bet *= 2; self.player.append(draw_card()); button.disabled = True; self.doubled = True
         if hand_value(self.player) > 21:
@@ -2526,12 +2527,23 @@ async def blackjack(interaction: discord.Interaction, bet: int = 10):
     if bet > bal:
         await interaction.response.send_message(embed=_base_embed("❌ Insufficient Funds", f"You only have **${bal:,}**!", C.DANGER), ephemeral=True); return
     player = [draw_card(), draw_card()]; dealer = [draw_card(), draw_card()]
-    if hand_value(player) == 21:
-        winnings = int(bet * 1.5)
-        new_bal  = update_balance_with_stats(interaction.user.id, winnings)
-        embed = _base_embed("🃏  NATURAL BLACKJACK! 🎉", color=C.CASINO)
-        embed.add_field(name="Your Hand", value=f"{hand_str(player)} — **21**",                         inline=False)
-        embed.add_field(name="Result",    value=f"**Blackjack! You win ${winnings:,}!**\nBalance: **${new_bal:,}**", inline=False)
+    player_bj = hand_value(player) == 21
+    dealer_bj = hand_value(dealer) == 21
+    if player_bj or dealer_bj:
+        embed = _base_embed("🃏  Blackjack!", color=C.CASINO)
+        embed.add_field(name="Your Hand",    value=f"{hand_str(player)} — **21**" if player_bj else f"{hand_str(player)} — **{hand_value(player)}**", inline=False)
+        embed.add_field(name="Dealer's Hand", value=f"{hand_str(dealer)} — **21**" if dealer_bj else f"{hand_str(dealer)} — **{hand_value(dealer)}**", inline=False)
+        if player_bj and dealer_bj:
+            embed.title = "🤝  Double Blackjack — Push!"
+            embed.add_field(name="Result", value=f"Both hands are blackjack — it's a **push**. Bet returned.\nBalance: **${get_balance(interaction.user.id):,}**", inline=False)
+        elif player_bj:
+            winnings = int(bet * 1.5)
+            new_bal  = update_balance_with_stats(interaction.user.id, winnings)
+            embed.add_field(name="Result", value=f"**Blackjack! You win ${winnings:,}!**\nBalance: **${new_bal:,}**", inline=False)
+        else:
+            new_bal = update_balance_with_stats(interaction.user.id, -bet)
+            embed.color = C.DANGER
+            embed.add_field(name="Result", value=f"**Dealer has blackjack! You lose ${bet:,}.**\nBalance: **${new_bal:,}**", inline=False)
         await interaction.response.send_message(embed=embed); return
     view = BlackjackView(interaction.user, bet, player, dealer)
     embed = view.build_embed()
