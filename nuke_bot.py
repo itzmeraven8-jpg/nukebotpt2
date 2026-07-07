@@ -1013,57 +1013,32 @@ async def ephemeral_help(interaction: discord.Interaction):
         return
 
     embed = _base_embed("💥  Destructive / Mass Action Commands", color=C.DANGER)
+
     embed.add_field(
-        name="Server Wipe",
+        name="⚡ Available in the dropdown below",
         value=(
-            "**nuke_channels** — delete all channels\n"
-            "**nuke_roles** — delete all non-default roles\n"
-            "**nuke_channels_roles** — delete channels + roles\n"
-            "**nuke_kick** — delete channels/roles + kick everyone\n"
-            "**nuke_full** — full reset: channels, roles, emojis, members"
+            "**Nuke Channels** · **Nuke Roles** · **Nuke Channels+Roles**\n"
+            "**Nuke + Kick** · **Full Server Nuke**\n"
+            "**Give Myself Admin** · **Remove My Admin** · **Show Highest Roles**\n"
+            "**Mass Timeout (10m)** · **Mass Untimeout** · **Mass Ban**\n"
+            "**Mass Deafen** · **Mass Disconnect**\n"
+            "**Lockdown** · **Unlock** · **Slowmode All (10s)** · **Strip All Roles**"
         ),
         inline=False,
     )
     embed.add_field(
-        name="Admin / Roles",
+        name="⌨️ Must be typed manually — not in the dropdown",
         value=(
-            "**give_admin** — grant yourself Administrator\n"
-            "**remove_admin** — remove your Administrator role\n"
-            "**show_high** — show the server's highest roles\n"
-            "**strip_roles** — remove all roles from everyone\n"
-            "**mass_role_add [role]** — add a role to everyone\n"
-            "**mass_role_remove [role]** — remove a role from everyone"
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name="Members / Voice",
-        value=(
-            "**mass_timeout [minutes]** — timeout everyone\n"
-            "**mass_untimeout** — remove all timeouts\n"
-            "**mass_ban** — ban everyone (except authorized users)\n"
-            "**mass_deafen** — deafen everyone in voice\n"
-            "**mass_disconnect** — disconnect everyone from voice"
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name="Channels / Server",
-        value=(
-            "**lockdown / unlockdown** — lock or unlock every channel\n"
-            "**slowmode_all [seconds]** — apply slowmode everywhere\n"
-            "**rename_all_channels** — rename every channel (via DM)\n"
-            "**change_server_name** — rename the server (via DM)\n"
-            "**change_server_icon** — change the server icon (via DM)"
+            "These need extra input (a role, a name, a URL) so they can't be a simple dropdown pick:\n"
+            "**!mass_role_add [role]** — add a role to everyone\n"
+            "**!mass_role_remove [role]** — remove a role from everyone\n"
+            "**!rename_all_channels** — rename every channel (via DM)\n"
+            "**!change_server_name** — rename the server (via DM)\n"
+            "**!change_server_icon** — change the server icon (via DM)"
         ),
         inline=False,
     )
     embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · only you can see this.")
-    embed.add_field(
-        name="⚡ Quick Run",
-        value="Use the dropdown below to run any of the parameter-free commands directly, with a Confirm/Cancel step. Commands needing extra input (roles, names, URLs) still need to be typed with `!`.",
-        inline=False,
-    )
 
     await interaction.response.send_message(embed=embed, view=EphemeralActionView(interaction.user.id), ephemeral=True)
 
