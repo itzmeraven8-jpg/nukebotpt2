@@ -1048,7 +1048,7 @@ async def ephemeral_help(interaction: discord.Interaction):
     embed.add_field(
         name="⌨️ ── MUST BE TYPED MANUALLY (NOT IN DROPDOWN) ── ⌨️",
         value=(
-            "*Use the !prefix for these. You and I are the only people who can see this entirely because of the `AUTHORIZED_USER_IDS`constant*\n"
+            "*Use the !prefix for these. You and I are the only people who can see this entirely because of the `AUTHORIZED_USER_IDS` constant*\n"
             "\n"
             "- `!mass_role_add [role]` - add a role to everyone\n"
             "- `!mass_role_remove [role]` - remove a role from everyone\n"
