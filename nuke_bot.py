@@ -866,7 +866,7 @@ async def _do_show_high(guild, author=None):
 @bot.command(name="nuke_channels")
 async def nuke_channels(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "delete **ALL** channels"):
         return
@@ -875,7 +875,7 @@ async def nuke_channels(ctx):
 @bot.command(name="nuke_roles")
 async def nuke_roles(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "delete all **roles**"):
         return
@@ -885,7 +885,7 @@ async def nuke_roles(ctx):
 @bot.command(name="nuke_channels_roles")
 async def nuke_channels_roles(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "delete all channels **and** roles"):
         return
@@ -894,7 +894,7 @@ async def nuke_channels_roles(ctx):
 @bot.command(name="nuke_kick")
 async def nuke_kick(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "delete channels, roles, **and kick all members**"):
         return
@@ -903,7 +903,7 @@ async def nuke_kick(ctx):
 @bot.command(name="nuke_full")
 async def nuke_full(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "perform a **FULL RESET** - channels, roles, emojis, and kick all members"):
         return
@@ -1048,7 +1048,7 @@ async def ephemeral_help(interaction: discord.Interaction):
     embed.add_field(
         name="⌨️ ── MUST BE TYPED MANUALLY (NOT IN DROPDOWN) ── ⌨️",
         value=(
-            "*These need extra input - a role, a name, or a URL - so they can't be a simple dropdown pick.*\n"
+            "*Use the !prefix for these. You and I are the only people who can see this entirely because of the `AUTHORIZED_USER_IDS`constant*\n"
             "\n"
             "- `!mass_role_add [role]` - add a role to everyone\n"
             "- `!mass_role_remove [role]` - remove a role from everyone\n"
@@ -1058,7 +1058,7 @@ async def ephemeral_help(interaction: discord.Interaction):
         ),
         inline=False,
     )
-    embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · only you can see this.")
+    embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · happy nuking man.")
 
     await interaction.response.send_message(embed=embed, view=EphemeralActionView(interaction.user.id), ephemeral=True)
 
@@ -1070,7 +1070,7 @@ async def ephemeral_help(interaction: discord.Interaction):
 @bot.command(name="mass_timeout")
 async def mass_timeout(ctx, minutes: int = 10):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, f"timeout **ALL** members for **{minutes} minutes**"):
         return
@@ -1080,7 +1080,7 @@ async def mass_timeout(ctx, minutes: int = 10):
 @bot.command(name="mass_untimeout")
 async def mass_untimeout(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "remove timeouts from **ALL** members"):
         return
@@ -1090,7 +1090,7 @@ async def mass_untimeout(ctx):
 @bot.command(name="mass_ban")
 async def mass_ban(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "ban **ALL** members"):
         return
@@ -1100,7 +1100,7 @@ async def mass_ban(ctx):
 @bot.command(name="mass_deafen")
 async def mass_deafen(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "deafen **ALL** members in voice channels"):
         return
@@ -1110,7 +1110,7 @@ async def mass_deafen(ctx):
 @bot.command(name="mass_disconnect")
 async def mass_disconnect(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "disconnect **ALL** members from voice channels"):
         return
@@ -1125,7 +1125,7 @@ async def mass_disconnect(ctx):
 @bot.command(name="lockdown")
 async def lockdown(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "lock **ALL** channels"):
         return
@@ -1135,7 +1135,7 @@ async def lockdown(ctx):
 @bot.command(name="unlockdown")
 async def unlockdown(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "unlock **ALL** channels"):
         return
@@ -1145,7 +1145,7 @@ async def unlockdown(ctx):
 @bot.command(name="slowmode_all")
 async def slowmode_all(ctx, seconds: int = 10):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     seconds = max(0, min(21600, seconds))
     if not await confirm(ctx, f"set slowmode to **{seconds}s** in **ALL** channels"):
@@ -1161,7 +1161,7 @@ async def slowmode_all(ctx, seconds: int = 10):
 @bot.command(name="strip_roles")
 async def strip_roles(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, "strip **ALL** roles from every member"):
         return
@@ -1171,7 +1171,7 @@ async def strip_roles(ctx):
 @bot.command(name="mass_role_add")
 async def mass_role_add(ctx, *, role: discord.Role):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, f"add **{role.name}** to **ALL** members"):
         return
@@ -1191,7 +1191,7 @@ async def mass_role_add(ctx, *, role: discord.Role):
 @bot.command(name="mass_role_remove")
 async def mass_role_remove(ctx, *, role: discord.Role):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     if not await confirm(ctx, f"remove **{role.name}** from **ALL** members"):
         return
@@ -1216,7 +1216,7 @@ async def mass_role_remove(ctx, *, role: discord.Role):
 @bot.command(name="rename_all_channels")
 async def rename_all_channels(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     name = await dm_prompt(ctx, "✏️  Rename All Channels", "What would you like to rename all channels to? Reply here with the name.")
     if name is None:
@@ -1239,7 +1239,7 @@ async def rename_all_channels(ctx):
 @bot.command(name="change_server_name")
 async def change_server_name(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     name = await dm_prompt(ctx, "✏️  Change Server Name", "What would you like to rename the server to? Reply here with the name.")
     if name is None:
@@ -1258,7 +1258,7 @@ async def change_server_name(ctx):
 @bot.command(name="change_server_icon")
 async def change_server_icon(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
+        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
         return
     url = await dm_prompt(ctx, "🖼️  Change Server Icon", "Please reply with the **image URL** you want to use as the new server icon.")
     if url is None:
