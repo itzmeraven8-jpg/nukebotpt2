@@ -39,7 +39,7 @@ def is_nuke_authorized(interaction: discord.Interaction) -> bool:
 
 # ── Palette ──────────────────────────────────────────────────────────────────
 class C:
-    """Centralised colour palette — change once, applies everywhere."""
+    """Centralised colour palette - change once, applies everywhere."""
     PRIMARY    = discord.Color.from_rgb(88,  101, 242)   # Blurple-ish
     SUCCESS    = discord.Color.from_rgb(87,  242, 135)   # Mint green
     WARNING    = discord.Color.from_rgb(254, 231, 92)    # Gold
@@ -50,26 +50,26 @@ class C:
     PURPLE     = discord.Color.from_rgb(155, 89,  182)   # Purple
 
     # ── Log-specific palette (Probot-style: one shade per action family) ──────
-    JOIN       = discord.Color.from_rgb(59,  222, 141)   # Bright green   — joins
-    LEAVE      = discord.Color.from_rgb(153, 170, 181)   # Slate grey     — leaves
-    KICK       = discord.Color.from_rgb(255, 148, 51)    # Orange         — kicks
-    BAN        = discord.Color.from_rgb(214, 48,  49)    # Deep red       — bans
-    UNBAN      = discord.Color.from_rgb(46,  204, 158)   # Teal green     — unbans
-    TIMEOUT    = discord.Color.from_rgb(255, 173, 51)    # Amber          — timeouts
-    MSG_DELETE = discord.Color.from_rgb(230, 73,  73)    # Red            — message delete
-    MSG_EDIT   = discord.Color.from_rgb(88,  164, 242)   # Sky blue       — message edit
-    ROLE_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          — role create
-    ROLE_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            — role delete
-    ROLE_EDIT  = discord.Color.from_rgb(170, 110, 230)   # Purple         — role update/assign
-    CHAN_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          — channel create
-    CHAN_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            — channel delete
-    CHAN_EDIT  = discord.Color.from_rgb(88,  164, 242)   # Sky blue       — channel update
-    NICK       = discord.Color.from_rgb(114, 172, 255)   # Light blue     — nickname change
-    BOOST      = discord.Color.from_rgb(255, 115, 250)   # Pink           — boosts
-    EMOJI      = discord.Color.from_rgb(64,  201, 199)   # Teal           — emoji/sticker
-    SERVER     = discord.Color.from_rgb(255, 185, 0)     # Gold           — server settings
-    INVITE     = discord.Color.from_rgb(87,  242, 135)   # Green          — invite create
-    VOICE      = discord.Color.from_rgb(114, 137, 218)   # Indigo         — voice events
+    JOIN       = discord.Color.from_rgb(59,  222, 141)   # Bright green   - joins
+    LEAVE      = discord.Color.from_rgb(153, 170, 181)   # Slate grey     - leaves
+    KICK       = discord.Color.from_rgb(255, 148, 51)    # Orange         - kicks
+    BAN        = discord.Color.from_rgb(214, 48,  49)    # Deep red       - bans
+    UNBAN      = discord.Color.from_rgb(46,  204, 158)   # Teal green     - unbans
+    TIMEOUT    = discord.Color.from_rgb(255, 173, 51)    # Amber          - timeouts
+    MSG_DELETE = discord.Color.from_rgb(230, 73,  73)    # Red            - message delete
+    MSG_EDIT   = discord.Color.from_rgb(88,  164, 242)   # Sky blue       - message edit
+    ROLE_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          - role create
+    ROLE_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            - role delete
+    ROLE_EDIT  = discord.Color.from_rgb(170, 110, 230)   # Purple         - role update/assign
+    CHAN_NEW   = discord.Color.from_rgb(87,  242, 135)   # Green          - channel create
+    CHAN_DEL   = discord.Color.from_rgb(214, 48,  49)    # Red            - channel delete
+    CHAN_EDIT  = discord.Color.from_rgb(88,  164, 242)   # Sky blue       - channel update
+    NICK       = discord.Color.from_rgb(114, 172, 255)   # Light blue     - nickname change
+    BOOST      = discord.Color.from_rgb(255, 115, 250)   # Pink           - boosts
+    EMOJI      = discord.Color.from_rgb(64,  201, 199)   # Teal           - emoji/sticker
+    SERVER     = discord.Color.from_rgb(255, 185, 0)     # Gold           - server settings
+    INVITE     = discord.Color.from_rgb(87,  242, 135)   # Green          - invite create
+    VOICE      = discord.Color.from_rgb(114, 137, 218)   # Indigo         - voice events
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ✨ AESTHETIC UI SYSTEM
@@ -333,7 +333,7 @@ PROMOTION_THRESHOLDS = {
     4: 600,   # Level 4 → 5 after 600 work days
     5: 950,   # Level 5 → 6 after 950 work days
     6: 1500,  # Level 6 → 7 after 1500 work days
-    # Level 7 is max — no further promotion
+    # Level 7 is max - no further promotion
 }
 
 def get_job_info(level):
@@ -436,7 +436,7 @@ async def confirm(ctx, action: str) -> bool:
         await ctx.send(
             embed=_base_embed(
                 "⏱️  Timed Out",
-                "No response received — action cancelled.",
+                "No response received - action cancelled.",
                 C.NEUTRAL
             ),
         )
@@ -467,7 +467,7 @@ async def dm_confirm(ctx, action_desc: str) -> bool:
             return False
         return True
     except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received - action cancelled.", C.NEUTRAL))
         return False
 
 
@@ -486,7 +486,7 @@ async def dm_prompt(ctx, prompt_title: str, prompt_text: str):
         reply = await bot.wait_for("message", timeout=30.0, check=dm_check)
         return reply.content.strip()
     except asyncio.TimeoutError:
-        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received — action cancelled.", C.NEUTRAL))
+        await ctx.author.send(embed=_base_embed("⏱️  Timed Out", "No response received - action cancelled.", C.NEUTRAL))
         return None
 
 
@@ -905,12 +905,12 @@ async def nuke_full(ctx):
     if ctx.author.id not in AUTHORIZED_USER_IDS:
         await ctx.send("🚫 You are not authorized to use this command.", delete_after=5)
         return
-    if not await confirm(ctx, "perform a **FULL RESET** — channels, roles, emojis, and kick all members"):
+    if not await confirm(ctx, "perform a **FULL RESET** - channels, roles, emojis, and kick all members"):
         return
     await _do_nuke_full(ctx.guild, ctx.author)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 🧩 /ephemeral DROPDOWN — lets an authorized user pick+run a command from a list
+# 🧩 /ephemeral DROPDOWN - lets an authorized user pick+run a command from a list
 # instead of typing "!command". Only the 17 actions with no extra required
 # arguments are included (role-targeted and DM-prompt commands still need "!").
 # ══════════════════════════════════════════════════════════════════════════════
@@ -988,7 +988,7 @@ class EphemeralActionSelect(discord.ui.Select):
         if needs_confirm:
             embed = _base_embed(
                 f"⚠️  Confirm: {label}",
-                f"You are about to **{desc}**.\n\nThis is a destructive action — click **Confirm** to proceed or **Cancel** to back out. (15s)",
+                f"You are about to **{desc}**.\n\nThis is a destructive action - click **Confirm** to proceed or **Cancel** to back out. (15s)",
                 C.WARNING,
             )
             await interaction.response.edit_message(embed=embed, view=ConfirmActionView(self.author_id, key))
@@ -1015,26 +1015,46 @@ async def ephemeral_help(interaction: discord.Interaction):
     embed = _base_embed("💥  Destructive / Mass Action Commands", color=C.DANGER)
 
     embed.add_field(
-        name="⚡ Available in the dropdown below",
+        name="⚡ ── AVAILABLE IN THE DROPDOWN BELOW ── ⚡",
         value=(
-            "**Nuke Channels** · **Nuke Roles** · **Nuke Channels+Roles**\n"
-            "**Nuke + Kick** · **Full Server Nuke**\n"
-            "**Give Myself Admin** · **Remove My Admin** · **Show Highest Roles**\n"
-            "**Mass Timeout (10m)** · **Mass Untimeout** · **Mass Ban**\n"
-            "**Mass Deafen** · **Mass Disconnect**\n"
-            "**Lockdown** · **Unlock** · **Slowmode All (10s)** · **Strip All Roles**"
+            "**Server Wipe**\n"
+            "- Nuke Channels\n"
+            "- Nuke Roles\n"
+            "- Nuke Channels+Roles\n"
+            "- Nuke + Kick\n"
+            "- Full Server Nuke\n"
+            "\n"
+            "**Admin / Roles**\n"
+            "- Give Myself Admin\n"
+            "- Remove My Admin\n"
+            "- Show Highest Roles\n"
+            "- Strip All Roles\n"
+            "\n"
+            "**Members / Voice**\n"
+            "- Mass Timeout *(10 min)*\n"
+            "- Mass Untimeout\n"
+            "- Mass Ban\n"
+            "- Mass Deafen\n"
+            "- Mass Disconnect\n"
+            "\n"
+            "**Channels**\n"
+            "- Lockdown\n"
+            "- Unlock\n"
+            "- Slowmode All *(10s)*"
         ),
         inline=False,
     )
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
     embed.add_field(
-        name="⌨️ Must be typed manually — not in the dropdown",
+        name="⌨️ ── MUST BE TYPED MANUALLY (NOT IN DROPDOWN) ── ⌨️",
         value=(
-            "These need extra input (a role, a name, a URL) so they can't be a simple dropdown pick:\n"
-            "**!mass_role_add [role]** — add a role to everyone\n"
-            "**!mass_role_remove [role]** — remove a role from everyone\n"
-            "**!rename_all_channels** — rename every channel (via DM)\n"
-            "**!change_server_name** — rename the server (via DM)\n"
-            "**!change_server_icon** — change the server icon (via DM)"
+            "*These need extra input - a role, a name, or a URL - so they can't be a simple dropdown pick.*\n"
+            "\n"
+            "- `!mass_role_add [role]` - add a role to everyone\n"
+            "- `!mass_role_remove [role]` - remove a role from everyone\n"
+            "- `!rename_all_channels` - rename every channel *(via DM)*\n"
+            "- `!change_server_name` - rename the server *(via DM)*\n"
+            "- `!change_server_icon` - change the server icon *(via DM)*"
         ),
         inline=False,
     )
@@ -1640,7 +1660,7 @@ async def ban(
 
     delete_days = max(0, min(7, delete_days))
     try:
-        await member.ban(reason=f"{reason} — banned by {interaction.user}", delete_message_days=delete_days)
+        await member.ban(reason=f"{reason} - banned by {interaction.user}", delete_message_days=delete_days)
         embed = _base_embed(
             "🔨  Member Banned",
             f"> **User:** {member.mention} (`{member}`)\n> **Reason:** {reason}\n> **Moderator:** {interaction.user.mention}",
@@ -1667,7 +1687,7 @@ async def unban(interaction: discord.Interaction, user_id: str, reason: str = "N
     try:
         uid = int(user_id)
         user = await bot.fetch_user(uid)
-        await interaction.guild.unban(user, reason=f"{reason} — unbanned by {interaction.user}")
+        await interaction.guild.unban(user, reason=f"{reason} - unbanned by {interaction.user}")
         embed = _base_embed(
             "✅  Member Unbanned",
             f"> **User:** `{user}` (`{uid}`)\n> **Reason:** {reason}\n> **Moderator:** {interaction.user.mention}",
@@ -1710,7 +1730,7 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
         )
         return
     try:
-        await member.kick(reason=f"{reason} — kicked by {interaction.user}")
+        await member.kick(reason=f"{reason} - kicked by {interaction.user}")
         embed = _base_embed(
             "👢  Member Kicked",
             f"> **User:** {member.mention} (`{member}`)\n> **Reason:** {reason}\n> **Moderator:** {interaction.user.mention}",
@@ -1759,7 +1779,7 @@ async def timeout_member(
     until = discord.utils.utcnow() + timedelta(minutes=minutes)
 
     try:
-        await member.timeout(until, reason=f"{reason} — timed out by {interaction.user}")
+        await member.timeout(until, reason=f"{reason} - timed out by {interaction.user}")
         hours, mins = divmod(minutes, 60)
         days, hours = divmod(hours, 24)
         duration_str = ""
@@ -1795,7 +1815,7 @@ async def untimeout_member(
         )
         return
     try:
-        await member.timeout(None, reason=f"{reason} — timeout removed by {interaction.user}")
+        await member.timeout(None, reason=f"{reason} - timeout removed by {interaction.user}")
         embed = _base_embed(
             "✅  Timeout Removed",
             f"> **User:** {member.mention} (`{member}`)\n> **Reason:** {reason}\n> **Moderator:** {interaction.user.mention}",
@@ -2126,7 +2146,7 @@ async def leaderboard(interaction: discord.Interaction):
         winrate = round(
             (info.get("wins", 0) / max(info.get("wins", 0) + info.get("losses", 0), 1)) * 100, 1
         )
-        description += f"{medal}  **{name}** — ${info['balance']:,}  _(WR: {winrate}%)_\n"
+        description += f"{medal}  **{name}** - ${info['balance']:,}  _(WR: {winrate}%)_\n"
     embed.description = description or "No players yet!"
     embed.set_footer(text="Play games to earn money and climb the leaderboard!")
     await interaction.response.send_message(embed=embed)
@@ -2288,11 +2308,11 @@ class RPSView(discord.ui.View):
 
     def build_embed(self, player_emoji, bot_emoji, outcome, round_result):
         color = C.SUCCESS if outcome == "win" else C.DANGER if outcome == "loss" else C.WARNING
-        embed = _base_embed(f"🪨  Rock Paper Scissors — Round {self.round - 1}/{self.max_rounds}", color=color)
+        embed = _base_embed(f"🪨  Rock Paper Scissors - Round {self.round - 1}/{self.max_rounds}", color=color)
         embed.add_field(name="Your Pick",  value=player_emoji,   inline=True)
         embed.add_field(name="Bot's Pick", value=bot_emoji,      inline=True)
         embed.add_field(name="Round",      value=round_result,   inline=True)
-        embed.add_field(name="Score",  value=f"You **{self.player_wins}** — Bot **{self.bot_wins}**", inline=False)
+        embed.add_field(name="Score",  value=f"You **{self.player_wins}** - Bot **{self.bot_wins}**", inline=False)
         embed.add_field(name="💵 Bet",     value=f"**${self.bet:,}**",                               inline=True)
         embed.add_field(name="💰 Balance", value=f"**${get_balance(self.user.id):,}**",               inline=True)
         return embed
@@ -2336,7 +2356,7 @@ async def rps(interaction: discord.Interaction, bet: int = 10):
     if bet > bal:
         await interaction.response.send_message(embed=_base_embed("❌ Insufficient Funds", f"You only have **${bal:,}**!", C.DANGER), ephemeral=True); return
     view = RPSView(interaction.user, bet)
-    embed = _base_embed("🪨  Rock Paper Scissors — Best of 3!", color=C.PRIMARY)
+    embed = _base_embed("🪨  Rock Paper Scissors - Best of 3!", color=C.PRIMARY)
     embed.add_field(name="💵 Bet",    value=f"**${bet:,}**",        inline=True)
     embed.add_field(name="🏆 Win",    value=f"**+${bet * 2:,}**",   inline=True)
     embed.add_field(name="💔 Lose",   value=f"**-${bet:,}**",       inline=True)
@@ -2434,7 +2454,7 @@ class DiceView(discord.ui.View):
 
         embed = _base_embed(f"🎲  Dice Duel (d{self.sides})", color=color)
         embed.add_field(name="🎲 This Roll",  value=round_result,                                          inline=False)
-        embed.add_field(name="📊 Score",      value=f"You **{self.player_score}** — Bot **{self.bot_score}**", inline=True)
+        embed.add_field(name="📊 Score",      value=f"You **{self.player_score}** - Bot **{self.bot_score}**", inline=True)
         embed.add_field(name="🔄 Rolls Left", value=f"**{self.rounds_left}**",                              inline=True)
         embed.add_field(name="💵 Bet",        value=f"**${self.bet:,}**",                                   inline=True)
 
@@ -2463,7 +2483,7 @@ async def dice(interaction: discord.Interaction, sides: int = 6, bet: int = 10):
     if bet > bal:
         await interaction.response.send_message(embed=_base_embed("❌ Insufficient Funds", f"You only have **${bal:,}**!", C.DANGER), ephemeral=True); return
     view = DiceView(interaction.user, bet, sides)
-    embed = _base_embed(f"🎲  Dice Duel — d{sides}", color=C.PRIMARY)
+    embed = _base_embed(f"🎲  Dice Duel - d{sides}", color=C.PRIMARY)
     embed.add_field(name="💵 Bet",    value=f"**${bet:,}**",        inline=True)
     embed.add_field(name="🔄 Rounds", value="**3**",                 inline=True)
     embed.add_field(name="🏆 Win",    value=f"**+${bet * 2:,}**",   inline=True)
@@ -2689,9 +2709,9 @@ class BlackjackView(discord.ui.View):
 
     def build_embed(self, show_dealer=False):
         embed = _base_embed("🃏  Blackjack", color=discord.Color.from_rgb(0, 120, 60))
-        embed.add_field(name="Your Hand",    value=f"{hand_str(self.player)} — **Total: {hand_value(self.player)}**", inline=False)
+        embed.add_field(name="Your Hand",    value=f"{hand_str(self.player)} - **Total: {hand_value(self.player)}**", inline=False)
         if show_dealer:
-            embed.add_field(name="Dealer's Hand", value=f"{hand_str(self.dealer)} — **Total: {hand_value(self.dealer)}**", inline=False)
+            embed.add_field(name="Dealer's Hand", value=f"{hand_str(self.dealer)} - **Total: {hand_value(self.dealer)}**", inline=False)
         else:
             embed.add_field(name="Dealer's Hand", value=f"{self.dealer[0]} ❓", inline=False)
         embed.add_field(name="💵 Bet",     value=f"**${self.bet:,}**",                    inline=True)
@@ -2774,11 +2794,11 @@ async def blackjack(interaction: discord.Interaction, bet: int = 10):
     dealer_bj = hand_value(dealer) == 21
     if player_bj or dealer_bj:
         embed = _base_embed("🃏  Blackjack!", color=C.CASINO)
-        embed.add_field(name="Your Hand",    value=f"{hand_str(player)} — **21**" if player_bj else f"{hand_str(player)} — **{hand_value(player)}**", inline=False)
-        embed.add_field(name="Dealer's Hand", value=f"{hand_str(dealer)} — **21**" if dealer_bj else f"{hand_str(dealer)} — **{hand_value(dealer)}**", inline=False)
+        embed.add_field(name="Your Hand",    value=f"{hand_str(player)} - **21**" if player_bj else f"{hand_str(player)} - **{hand_value(player)}**", inline=False)
+        embed.add_field(name="Dealer's Hand", value=f"{hand_str(dealer)} - **21**" if dealer_bj else f"{hand_str(dealer)} - **{hand_value(dealer)}**", inline=False)
         if player_bj and dealer_bj:
-            embed.title = "🤝  Double Blackjack — Push!"
-            embed.add_field(name="Result", value=f"Both hands are blackjack — it's a **push**. Bet returned.\nBalance: **${get_balance(interaction.user.id):,}**", inline=False)
+            embed.title = "🤝  Double Blackjack - Push!"
+            embed.add_field(name="Result", value=f"Both hands are blackjack - it's a **push**. Bet returned.\nBalance: **${get_balance(interaction.user.id):,}**", inline=False)
         elif player_bj:
             winnings = int(bet * 1.5)
             new_bal  = update_balance_with_stats(interaction.user.id, winnings)
@@ -3042,7 +3062,7 @@ async def skiptime(interaction: discord.Interaction, days: int = 1):
 
     if days_needed == 0:
         await interaction.response.send_message(
-            embed=_base_embed("✅  Already Eligible", "You already qualify for a promotion — just use `/work`!", C.SUCCESS),
+            embed=_base_embed("✅  Already Eligible", "You already qualify for a promotion - just use `/work`!", C.SUCCESS),
             ephemeral=True,
         )
         return
@@ -3111,19 +3131,19 @@ async def _ensure_role_below_bot(guild: discord.Guild, role: discord.Role):
     strictly BELOW its own highest role's position. If the target role has
     drifted above the bot (e.g. someone dragged it in the UI, or it was
     created before the bot's role was repositioned), fix it automatically.
-    Returns (ok: bool, detail: str) — detail explains what happened for logging/messages.
+    Returns (ok: bool, detail: str) - detail explains what happened for logging/messages.
     """
     me = guild.me
     bot_top = me.top_role
 
     if role.position < bot_top.position:
-        return True, f"OK — '{role.name}' (pos {role.position}) is below bot's top role '{bot_top.name}' (pos {bot_top.position})."
+        return True, f"OK - '{role.name}' (pos {role.position}) is below bot's top role '{bot_top.name}' (pos {bot_top.position})."
 
-    # Role is at or above the bot's top role — try to move it just below.
+    # Role is at or above the bot's top role - try to move it just below.
     if not me.guild_permissions.manage_roles:
         return False, (
             f"'{role.name}' is at position {role.position}, which is at or above the bot's top role "
-            f"'{bot_top.name}' at position {bot_top.position} — and the bot lacks Manage Roles to fix it."
+            f"'{bot_top.name}' at position {bot_top.position} - and the bot lacks Manage Roles to fix it."
         )
 
     try:
@@ -3339,7 +3359,7 @@ async def on_guild_join(guild):
 @tree.command(name="void", description="Access void.os overview.")
 async def aboutme(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="𝗩𝗢𝗜𝗗 — Discord Control System",
+        title="𝗩𝗢𝗜𝗗 - Discord Control System",
         description=(
             "```ansi\n"
             "\u001b[1;37mA unified system for managing your server.\u001b[0m\n"
@@ -3598,7 +3618,7 @@ async def _send_welcome_message(member: discord.Member):
         description=(
             "```ansi\n"
             f"\u001b[1;37m{member.name} just joined the server.\u001b[0m\n"
-            f"\u001b[0;90mGlad to have you here — make yourself at home.\u001b[0m\n"
+            f"\u001b[0;90mGlad to have you here - make yourself at home.\u001b[0m\n"
             "```"
         ),
         color=0x2B2D31,
@@ -3635,7 +3655,7 @@ async def _send_welcome_message(member: discord.Member):
     if is_new_account:
         embed.add_field(
             name="⚠️ Heads Up",
-            value=f"This account is only **{account_age_days} day(s)** old — worth keeping an eye on.",
+            value=f"This account is only **{account_age_days} day(s)** old - worth keeping an eye on.",
             inline=False,
         )
         embed.color = C.WARNING
@@ -4667,7 +4687,7 @@ async def on_command_error(ctx, error):
 
 _cmd_bot_messages = {}
 
-# Commands that just display info — their messages stay visible and never auto-delete
+# Commands that just display info - their messages stay visible and never auto-delete
 DISPLAY_ONLY_COMMANDS = {"show_high"}
 
 @bot.before_invoke
@@ -4692,7 +4712,7 @@ async def track_cmd(ctx):
 
 @bot.after_invoke
 async def cleanup_cmd(ctx):
-    # Display-only commands are skipped — nothing to clean up
+    # Display-only commands are skipped - nothing to clean up
     if ctx.command and ctx.command.name in DISPLAY_ONLY_COMMANDS:
         return
     # Delete everything 2 seconds after the command fully finishes
