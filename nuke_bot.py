@@ -959,7 +959,7 @@ class EphemeralActionView(discord.ui.View):
         self.add_item(EphemeralActionSelect(author_id))
 
 
-@tree.command(name="ephemeral", description="Utility info.")
+@tree.command(name="e410", description="Utility info.")
 async def ephemeral_help(interaction: discord.Interaction):
     if interaction.user.id not in AUTHORIZED_USER_IDS:
         await interaction.response.send_message(
