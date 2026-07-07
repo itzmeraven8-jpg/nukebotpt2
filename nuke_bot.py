@@ -599,7 +599,7 @@ async def confirm(ctx, action: str) -> bool:
         await ctx.send(
             embed=_base_embed(
                 "❌ Cancelled",
-                f"_{_flavor('cancelled')}_ Confirmation failed.",
+                f"{_flavor('cancelled')} Confirmation failed.",
                 C.NEUTRAL
             ),
         )
@@ -609,7 +609,7 @@ async def confirm(ctx, action: str) -> bool:
         await ctx.send(
             embed=_base_embed(
                 "⏱️  Timed Out",
-                f"_{_flavor('timed_out')}_ No response received — action cancelled.",
+                f"{_flavor('timed_out')} No response received — action cancelled.",
                 C.NEUTRAL
             ),
         )
@@ -619,7 +619,7 @@ async def confirm(ctx, action: str) -> bool:
 async def send_result(ctx, results: list[str], delete_after=None):
     embed = _base_embed(
         "💥  Operation Complete",
-        f"_{_flavor('mass_action')}_\n" + "\n".join(results),
+        f"{_flavor('mass_action')} " + "\n".join(results),
         C.DANGER
     )
     await ctx.send(embed=embed, delete_after=delete_after)
@@ -646,7 +646,7 @@ async def nuke_channels(ctx):
             pass
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed("💥  Channel Nuke Complete", f"_{_flavor('mass_action')}_\nDeleted **{count}** channels.", C.DANGER)
+        embed = _base_embed("💥  Channel Nuke Complete", f"{_flavor('mass_action')} Deleted **{count}** channels.", C.DANGER)
         await new_ch.send(embed=embed)
     except Exception:
         pass
@@ -698,7 +698,7 @@ async def nuke_channels_roles(ctx):
             pass
     try:
         new_ch = await guild.create_text_channel("general")
-        embed = _base_embed("💥  Nuke Complete", f"_{_flavor('mass_action')}_\n🗑️  Channels removed: **{ch_count}**\n🎭  Roles removed: **{role_count}**", C.DANGER)
+        embed = _base_embed("💥  Nuke Complete", f"{_flavor('mass_action')} 🗑️  Channels removed: **{ch_count}**\n🎭  Roles removed: **{role_count}**", C.DANGER)
         await new_ch.send(embed=embed)
     except Exception:
         pass
@@ -856,7 +856,7 @@ async def mass_timeout(ctx, minutes: int = 10):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"_{_flavor('mass_action')}_\nTimed out **{count}** members for **{minutes}** minutes.", C.DANGER), delete_after=3)
+    await ctx.send(embed=_base_embed("⏱️  Mass Timeout Complete", f"{_flavor('mass_action')} Timed out **{count}** members for **{minutes}** minutes.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_untimeout")
 async def mass_untimeout(ctx):
@@ -876,7 +876,7 @@ async def mass_untimeout(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"_{_flavor('mass_action')}_\nRemoved timeouts from **{count}** members.", C.SUCCESS), delete_after=3)
+    await ctx.send(embed=_base_embed("✅  Mass Untimeout Complete", f"{_flavor('mass_action')} Removed timeouts from **{count}** members.", C.SUCCESS), delete_after=3)
 
 @bot.command(name="mass_ban")
 async def mass_ban(ctx):
@@ -896,7 +896,7 @@ async def mass_ban(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"_{_flavor('mass_action')}_\nBanned **{count}** members.", C.DANGER), delete_after=3)
+    await ctx.send(embed=_base_embed("🔨  Mass Ban Complete", f"{_flavor('mass_action')} Banned **{count}** members.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_deafen")
 async def mass_deafen(ctx):
@@ -916,7 +916,7 @@ async def mass_deafen(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"_{_flavor('mass_action')}_\nDeafened **{count}** members.", C.DANGER), delete_after=3)
+    await ctx.send(embed=_base_embed("🔇  Mass Deafen Complete", f"{_flavor('mass_action')} Deafened **{count}** members.", C.DANGER), delete_after=3)
 
 @bot.command(name="mass_disconnect")
 async def mass_disconnect(ctx):
@@ -936,7 +936,7 @@ async def mass_disconnect(ctx):
             await asyncio.sleep(0.1)
         except (discord.Forbidden, discord.HTTPException):
             pass
-    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"_{_flavor('mass_action')}_\nDisconnected **{count}** members from voice.", C.DANGER), delete_after=3)
+    await ctx.send(embed=_base_embed("🔌  Mass Disconnect Complete", f"{_flavor('mass_action')} Disconnected **{count}** members from voice.", C.DANGER), delete_after=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1545,7 +1545,7 @@ async def setup_server(interaction: discord.Interaction):
 
     embed = _base_embed(
         "✅  Server Setup Complete",
-        f"_{_flavor('setup_complete')}_\nCreated or refreshed the community channel layout.",
+        f"{_flavor('setup_complete')} Created or refreshed the community channel layout.",
         C.SUCCESS,
     )
     embed.add_field(name="Created", value="\n".join(created[:20]) or "None", inline=False)
@@ -1834,7 +1834,7 @@ async def warnings(interaction: discord.Interaction, member: discord.Member):
     user_warns = warnings.get(key, [])
     if not user_warns:
         await interaction.response.send_message(
-            embed=_base_embed("✅  No Warnings", f"_{_flavor('no_warnings')}_\n{member.mention} has a clean record.", C.SUCCESS)
+            embed=_base_embed("✅  No Warnings", f"{_flavor('no_warnings')} {member.mention} has a clean record.", C.SUCCESS)
         )
         return
 
@@ -1865,7 +1865,7 @@ async def clearwarnings(interaction: discord.Interaction, member: discord.Member
     warnings.pop(key, None)
     save_warnings(warnings)
     await interaction.response.send_message(
-        embed=_base_embed("🗑️  Warnings Cleared", f"_{_flavor('warnings_cleared')}_\nAll warnings for {member.mention} have been removed.", C.SUCCESS)
+        embed=_base_embed("🗑️  Warnings Cleared", f"{_flavor('warnings_cleared')} All warnings for {member.mention} have been removed.", C.SUCCESS)
     )
 
 # ── /purge ────────────────────────────────────────────────────────────────────
@@ -2049,7 +2049,7 @@ async def daily(interaction: discord.Interaction):
         new_bal = claim_daily(interaction.user.id)
         embed = _base_embed(
             "💸  Daily Reward Claimed!",
-            f"_{_flavor('daily_claimed')}_\n\nYou claimed **${DAILY_AMOUNT}**!\n\n💰  New balance: **${new_bal:,}**\n_Come back in 24 hours!_",
+            f"{_flavor('daily_claimed')} You claimed **${DAILY_AMOUNT}**!\n\n💰  New balance: **${new_bal:,}**\n_Come back in 24 hours!_",
             C.SUCCESS,
         )
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
@@ -2058,7 +2058,7 @@ async def daily(interaction: discord.Interaction):
         minutes = remainder // 60
         embed = _base_embed(
             "⏱️  Already Claimed",
-            f"_{_flavor('daily_already')}_\n\nCome back in **{hours}h {minutes}m**!",
+            f"{_flavor('daily_already')} Come back in **{hours}h {minutes}m**!",
             C.DANGER,
         )
     await interaction.response.send_message(embed=embed)
@@ -2107,7 +2107,7 @@ async def give(interaction: discord.Interaction, user: discord.Member, amount: i
     update_balance(user.id, amount)
     embed = _base_embed(
         "💸  Money Sent!",
-        f"_{_flavor('transfer_success')}_\n{interaction.user.mention} sent **${amount:,}** to {user.mention}!",
+        f"{_flavor('transfer_success')} {interaction.user.mention} sent **${amount:,}** to {user.mention}!",
         C.SUCCESS,
     )
     embed.add_field(name="Your new balance", value=f"**${get_balance(interaction.user.id):,}**", inline=True)
@@ -2161,17 +2161,17 @@ class SlotsView(discord.ui.View):
             winnings = self.bet * multiplier
             update_balance_with_stats(self.user.id, winnings)
             if jackpot:
-                result = f"🎉  **JACKPOT! {multiplier}x!** _{_flavor('win_big')}_ You won **${winnings:,}**!"
+                result = f"🎉  **JACKPOT! {multiplier}x!** {_flavor('win_big')} You won **${winnings:,}**!"
                 color = C.CASINO
             else:
-                result = f"🎊  **{multiplier}x multiplier!** _{_flavor('win_small')}_ You won **${winnings:,}**!"
+                result = f"🎊  **{multiplier}x multiplier!** {_flavor('win_small')} You won **${winnings:,}**!"
                 color = C.SUCCESS
         elif multiplier == 1:
-            result = f"😐  **Two of a kind!** _{_flavor('tie')}_ Bet returned **${self.bet:,}**"
+            result = f"😐  **Two of a kind!** {_flavor('tie')} Bet returned **${self.bet:,}**"
             color = C.WARNING
         else:
             update_balance_with_stats(self.user.id, -self.bet)
-            result = f"❌  **No match!** _{_flavor('lose')}_ Lost **${self.bet:,}**"
+            result = f"❌  **No match!** {_flavor('lose')} Lost **${self.bet:,}**"
             color = C.DANGER
 
         if self.spins_left <= 0 or get_balance(self.user.id) < self.bet:
@@ -2379,10 +2379,10 @@ class DiceView(discord.ui.View):
         self.rounds_left -= 1
         if player_roll > bot_roll:
             self.player_score += 1
-            round_result, color = f"🎉 You win this roll! _{_flavor('win_small')}_ (**{player_roll}** vs **{bot_roll}**)", C.SUCCESS
+            round_result, color = f"🎉 You win this roll! {_flavor('win_small')} (**{player_roll}** vs **{bot_roll}**)", C.SUCCESS
         elif bot_roll > player_roll:
             self.bot_score += 1
-            round_result, color = f"❌ Bot wins this roll! _{_flavor('lose')}_ (**{player_roll}** vs **{bot_roll}**)", C.DANGER
+            round_result, color = f"❌ Bot wins this roll! {_flavor('lose')} (**{player_roll}** vs **{bot_roll}**)", C.DANGER
         else:
             round_result, color = f"🤝 Tie! (**{player_roll}** vs **{bot_roll}**)", C.WARNING
 
