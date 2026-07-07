@@ -1165,7 +1165,7 @@ async def ephemeral_help(interaction: discord.Interaction):
         )
         return
 
-    embed = _base_embed("💥  E410 — Destructive / Mass Action Commands", color=C.DANGER)
+    embed = _base_embed("💥  E410 - Destructive / Mass Action Commands", color=C.DANGER)
 
     embed.add_field(
         name="⚡ ── AVAILABLE IN THE DROPDOWN BELOW ── ⚡",
