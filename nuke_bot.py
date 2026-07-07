@@ -674,37 +674,64 @@ async def nuke_full(ctx):
     except Exception:
         pass
 
-@bot.command(name="nuke_help")
-async def nuke_help(ctx):
-    embed1 = _base_embed("💥  Nuke Commands (1/2)", color=C.DANGER)
-    embed1.add_field(name="!nuke_channels",          value="Delete all channels",                            inline=False)
-    embed1.add_field(name="!nuke_roles",             value="Delete all non-default roles",                   inline=False)
-    embed1.add_field(name="!nuke_channels_roles",    value="Delete all channels and roles",                  inline=False)
-    embed1.add_field(name="!nuke_kick",              value="Delete channels, roles, and kick all members",   inline=False)
-    embed1.add_field(name="!nuke_full",              value="Full reset: channels, roles, emojis, members",   inline=False)
-    embed1.add_field(name="!give_admin",             value="Grant yourself the Administrator role",           inline=False)
-    embed1.add_field(name="!remove_admin",           value="Remove the Administrator role from yourself",     inline=False)
-    embed1.add_field(name="!show_high",              value="Show the highest roles in the server",            inline=False)
-    embed1.add_field(name="!mass_timeout [minutes]", value="Timeout every member at once",                   inline=False)
-    embed1.add_field(name="!mass_untimeout",         value="Remove all timeouts at once",                    inline=False)
-    embed1.add_field(name="!mass_ban",               value="Ban every member (except authorized users)",     inline=False)
-    embed1.add_field(name="!mass_deafen",            value="Deafen all members in voice channels",           inline=False)
-    embed1.add_field(name="!mass_disconnect",        value="Disconnect everyone from voice channels",        inline=False)
-    embed1.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
+@tree.command(name="ephemeral", description="View all mass action / destructive commands (authorized users only).")
+async def ephemeral_help(interaction: discord.Interaction):
+    if interaction.user.id not in AUTHORIZED_USER_IDS:
+        await interaction.response.send_message(
+            embed=_base_embed("🚫  Permission Denied", "You are not authorized to view this.", C.DANGER),
+            ephemeral=True,
+        )
+        return
 
-    embed2 = _base_embed("💥  Nuke Commands (2/2)", color=C.DANGER)
-    embed2.add_field(name="!lockdown",               value="Lock every channel at once",                     inline=False)
-    embed2.add_field(name="!unlockdown",             value="Unlock all channels at once",                    inline=False)
-    embed2.add_field(name="!slowmode_all [seconds]", value="Apply slowmode to every channel at once",        inline=False)
-    embed2.add_field(name="!strip_roles",            value="Remove all roles from every member",             inline=False)
-    embed2.add_field(name="!mass_role_add [role]",   value="Add a specific role to everyone",                inline=False)
-    embed2.add_field(name="!mass_role_remove [role]",value="Remove a specific role from everyone",           inline=False)
-    embed2.add_field(name="!rename_all_channels",    value="Rename every channel (prompts via DM)",          inline=False)
-    embed2.add_field(name="!change_server_name",     value="Change the server name (prompts via DM)",        inline=False)
-    embed2.add_field(name="!change_server_icon",     value="Change the server icon (prompts via DM)",        inline=False)
-    embed2.set_footer(text="⚠️  Requires AUTHORIZED_USER_IDS · All actions ask for confirmation.")
+    embed = _base_embed("💥  Destructive / Mass Action Commands", color=C.DANGER)
+    embed.add_field(
+        name="Server Wipe",
+        value=(
+            "**nuke_channels** — delete all channels\n"
+            "**nuke_roles** — delete all non-default roles\n"
+            "**nuke_channels_roles** — delete channels + roles\n"
+            "**nuke_kick** — delete channels/roles + kick everyone\n"
+            "**nuke_full** — full reset: channels, roles, emojis, members"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Admin / Roles",
+        value=(
+            "**give_admin** — grant yourself Administrator\n"
+            "**remove_admin** — remove your Administrator role\n"
+            "**show_high** — show the server's highest roles\n"
+            "**strip_roles** — remove all roles from everyone\n"
+            "**mass_role_add [role]** — add a role to everyone\n"
+            "**mass_role_remove [role]** — remove a role from everyone"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Members / Voice",
+        value=(
+            "**mass_timeout [minutes]** — timeout everyone\n"
+            "**mass_untimeout** — remove all timeouts\n"
+            "**mass_ban** — ban everyone (except authorized users)\n"
+            "**mass_deafen** — deafen everyone in voice\n"
+            "**mass_disconnect** — disconnect everyone from voice"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Channels / Server",
+        value=(
+            "**lockdown / unlockdown** — lock or unlock every channel\n"
+            "**slowmode_all [seconds]** — apply slowmode everywhere\n"
+            "**rename_all_channels** — rename every channel (via DM)\n"
+            "**change_server_name** — rename the server (via DM)\n"
+            "**change_server_icon** — change the server icon (via DM)"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text="⚠️  Authorized users only · every action asks for confirmation · only you can see this.")
 
-    await ctx.send(embeds=[embed1, embed2])
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4526,7 +4553,7 @@ async def on_command_error(ctx, error):
 _cmd_bot_messages = {}
 
 # Commands that just display info — their messages stay visible and never auto-delete
-DISPLAY_ONLY_COMMANDS = {"nuke_help", "show_high"}
+DISPLAY_ONLY_COMMANDS = {"show_high"}
 
 @bot.before_invoke
 async def track_cmd(ctx):
