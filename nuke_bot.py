@@ -1287,32 +1287,113 @@ async def change_server_icon(ctx):
 def _mod_check(interaction: discord.Interaction, permission: str = None):
     return interaction.user.id in AUTHORIZED_USER_IDS
 SERVER_TEMPLATE = {
-    "📢 Info": [
-        ("text", "welcome", "Say hello to new people joining.", "read_only"),
-        ("text", "rules", "How to not get banned.", "read_only"),
-        ("text", "announcements", "Big updates you actually need to read..", "read_only"),
-    ],
-    "💬 Chat": [
-        ("text", "general", "Just chilling and talking about whatever.", "chat"),
-        ("text", "bot-commands", "Keep your spammy bot stuff in here.", "bot_commands"),
-        ("text", "media", "Photos, videos, and links.", "media"),
-        ("text", "memes", "Jokes and internet humor.", "media"),
-        ("text", "gaming", "Drop your best shitposts and jokes.", "chat"),
-        ("text", "clips-highlights", "Gameplay videos.", "media"),
-    ],
-    "🛠️ Feedback": [
-        ("text", "suggestions", "Tell us how to make the server better.", "suggestions"),
-    ],
     "🔐 Staff": [
         ("text", "staff-chat", "Private staff discussion.", "staff_chat"),
+        ("text", "mod-queue", "Reports and pending mod actions.", "staff_chat"),
         ("text", "staff-logs", "Moderation logs and system actions.", "staff_logs"),
         ("voice", "Staff Voice", "Private staff voice channel.", "staff_voice"),
     ],
+    "📢 Information": [
+        ("text", "welcome", "Say hello to new people joining.", "read_only"),
+        ("text", "rules", "How to not get banned.", "read_only"),
+        ("text", "announcements", "Big updates you actually need to read..", "read_only"),
+        ("text", "roles-info", "What each role means and how to get it.", "read_only"),
+    ],
+    "💬 Community": [
+        ("text", "general", "Just chilling and talking about whatever.", "chat"),
+        ("text", "media", "Photos, videos, and links.", "media"),
+        ("text", "memes", "Jokes and internet humor.", "media"),
+    ],
+    "🎮 Gaming": [
+        ("text", "gaming", "Drop your best shitposts and jokes.", "chat"),
+        ("text", "clips-highlights", "Gameplay videos.", "media"),
+        ("text", "looking-for-group", "Find people to play with.", "chat"),
+    ],
+    "🤖 Bots": [
+        ("text", "bot-commands", "Keep your spammy bot stuff in here.", "bot_commands"),
+    ],
+    "🛠️ Feedback": [
+        ("text", "suggestions", "Tell us how to make the server better.", "suggestions"),
+        ("text", "bug-reports", "Something broken? Report it here.", "suggestions"),
+    ],
     "🔊 Voice Channels": [
         ("voice", "🔊 Lounge", "Hop in to talk.", "voice"),
+        ("voice", "🎮 Gaming Voice", "Squad up and play.", "voice"),
         ("voice", "💤 AFK", "Where you get dumped when you walk away.", "afk_voice"),
     ],
 }
+
+
+# name -> (color, permissions, hoist, mentionable)
+# Ordered top-to-bottom = highest-to-lowest desired role importance.
+ROLE_TEMPLATE = [
+    ("Admin", discord.Color.red(), discord.Permissions(administrator=True), True, True),
+    ("Moderator", discord.Color.orange(), discord.Permissions(
+        kick_members=True, ban_members=True, moderate_members=True,
+        manage_messages=True, manage_nicknames=True, mute_members=True,
+        deafen_members=True, move_members=True,
+    ), True, True),
+    ("Staff", discord.Color.blue(), discord.Permissions.none(), True, False),
+    ("Member", discord.Color.green(), discord.Permissions(
+        send_messages=True, read_message_history=True, connect=True, speak=True,
+        add_reactions=True, use_external_emojis=True, create_public_threads=True,
+    ), False, False),
+    ("Muted", discord.Color.dark_grey(), discord.Permissions.none(), False, False),
+]
+
+
+async def _setup_roles(guild: discord.Guild, reason: str):
+    """Create (or update the color/permissions/hoist of) the standard role set.
+    Returns (roles_by_name, created_names, updated_names, skipped_names)."""
+    roles_by_name = {}
+    created, updated, skipped = [], [], []
+
+    for name, color, perms, hoist, mentionable in ROLE_TEMPLATE:
+        role = discord.utils.get(guild.roles, name=name)
+        try:
+            if role is None:
+                role = await guild.create_role(
+                    name=name, color=color, permissions=perms,
+                    hoist=hoist, mentionable=mentionable, reason=reason,
+                )
+                created.append(name)
+            else:
+                await role.edit(
+                    color=color, permissions=perms, hoist=hoist,
+                    mentionable=mentionable, reason=reason,
+                )
+                updated.append(name)
+            roles_by_name[name] = role
+        except (discord.Forbidden, discord.HTTPException):
+            skipped.append(name)
+
+    reordered = await _reorder_staff_roles(guild, roles_by_name, reason)
+    if not reordered and roles_by_name:
+        skipped.append("Role ordering")
+
+    return roles_by_name, created, updated, skipped
+
+
+async def _reorder_staff_roles(guild: discord.Guild, roles_by_name: dict, reason: str) -> bool:
+    """Force Admin > Moderator > Staff > Member > Muted, positioned directly below
+    the bot's own top role, regardless of where they happened to get created."""
+    me = guild.me or guild.get_member(bot.user.id)
+    if me is None or not me.guild_permissions.manage_roles:
+        return False
+
+    # ROLE_TEMPLATE is already listed highest-to-lowest, so reuse that order.
+    ordered_roles = [roles_by_name[name] for name, *_ in ROLE_TEMPLATE if name in roles_by_name]
+    if not ordered_roles:
+        return False
+
+    top_pos = max(1, me.top_role.position - 1)
+    positions = {role: max(1, top_pos - i) for i, role in enumerate(ordered_roles)}
+
+    try:
+        await guild.edit_role_positions(positions=positions, reason=reason)
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        return False
 
 
 async def _get_staff_role(guild: discord.Guild, reason: str):
@@ -1335,32 +1416,34 @@ async def _get_staff_role(guild: discord.Guild, reason: str):
         return None
 
 
-def _category_overwrites(guild: discord.Guild, category_name: str, staff_role: discord.Role = None):
+def _category_overwrites(guild: discord.Guild, category_name: str, staff_role: discord.Role = None, muted_role: discord.Role = None):
     everyone = guild.default_role
+    overwrites = {}
 
     if category_name == "🔐 Staff":
-        overwrites = {
-            everyone: discord.PermissionOverwrite(view_channel=False)
-        }
-
+        overwrites[everyone] = discord.PermissionOverwrite(view_channel=False)
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
             )
+    else:
+        overwrites[everyone] = discord.PermissionOverwrite(view_channel=True)
 
-        return overwrites
+    if muted_role:
+        overwrites[muted_role] = discord.PermissionOverwrite(
+            send_messages=False, add_reactions=False, speak=False,
+            create_public_threads=False, create_private_threads=False,
+        )
 
-    return {
-        everyone: discord.PermissionOverwrite(view_channel=True)
-    }
+    return overwrites
 
 
-def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Role = None):
+def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Role = None, muted_role: discord.Role = None):
     everyone = guild.default_role
 
     if preset == "read_only":
-        return {
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
@@ -1371,8 +1454,8 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    if preset == "bot_commands":
-        return {
+    elif preset == "bot_commands":
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
@@ -1382,8 +1465,8 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    if preset == "media":
-        return {
+    elif preset == "media":
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
@@ -1393,8 +1476,8 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    if preset == "suggestions":
-        return {
+    elif preset == "suggestions":
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
@@ -1404,11 +1487,10 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    if preset == "staff_chat":
+    elif preset == "staff_chat":
         overwrites = {
             everyone: discord.PermissionOverwrite(view_channel=False)
         }
-
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(
                 view_channel=True,
@@ -1418,13 +1500,10 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
                 embed_links=True,
             )
 
-        return overwrites
-
-    if preset == "staff_logs":
+    elif preset == "staff_logs":
         overwrites = {
             everyone: discord.PermissionOverwrite(view_channel=False)
         }
-
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(
                 view_channel=True,
@@ -1435,16 +1514,13 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
                 create_private_threads=False,
             )
 
-        return overwrites
-
-    if preset == "staff_voice":
+    elif preset == "staff_voice":
         overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=False,
                 connect=False,
             )
         }
-
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(
                 view_channel=True,
@@ -1454,10 +1530,8 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
                 use_voice_activation=True,
             )
 
-        return overwrites
-
-    if preset == "afk_voice":
-        return {
+    elif preset == "afk_voice":
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=True,
@@ -1467,8 +1541,8 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    if preset == "voice":
-        return {
+    elif preset == "voice":
+        overwrites = {
             everyone: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=True,
@@ -1478,13 +1552,28 @@ def _setup_overwrites(guild: discord.Guild, preset: str, staff_role: discord.Rol
             )
         }
 
-    return {
-        everyone: discord.PermissionOverwrite(
-            view_channel=True,
-            read_message_history=True,
-            send_messages=True,
+    else:
+        overwrites = {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                send_messages=True,
+            )
+        }
+
+    # Muted role always gets locked out of talking/reacting/streaming, on top of
+    # whatever the preset above already set for @everyone / Staff.
+    if muted_role and preset not in ("staff_chat", "staff_logs", "staff_voice"):
+        muted_overwrite = discord.PermissionOverwrite(
+            send_messages=False, add_reactions=False,
+            create_public_threads=False, create_private_threads=False,
         )
-    }
+        if preset in ("voice", "afk_voice"):
+            muted_overwrite.speak = False
+            muted_overwrite.stream = False
+        overwrites[muted_role] = muted_overwrite
+
+    return overwrites
 
 
 def _find_category(guild: discord.Guild, name: str):
@@ -1527,14 +1616,19 @@ async def setup_server(interaction: discord.Interaction):
     updated = []
     skipped = []
     afk_channel = None
+    category_objects = {}
 
-    staff_role = await _get_staff_role(guild, f"Server setup by {interaction.user}")
+    roles_by_name, roles_created, roles_updated, roles_skipped = await _setup_roles(
+        guild, f"Server setup by {interaction.user}"
+    )
+    staff_role = roles_by_name.get("Staff")
+    muted_role = roles_by_name.get("Muted")
     if staff_role is None:
         skipped.append("Staff role")
 
     for category_name, channel_specs in SERVER_TEMPLATE.items():
         category = _find_category(guild, category_name)
-        category_overwrites = _category_overwrites(guild, category_name, staff_role)
+        category_overwrites = _category_overwrites(guild, category_name, staff_role, muted_role)
 
         try:
             if category is None:
@@ -1554,8 +1648,10 @@ async def setup_server(interaction: discord.Interaction):
             skipped.append(category_name)
             continue
 
+        category_objects[category_name] = category
+
         for channel_type, channel_name, topic, preset in channel_specs:
-            overwrites = _setup_overwrites(guild, preset, staff_role)
+            overwrites = _setup_overwrites(guild, preset, staff_role, muted_role)
             channel = _find_channel(guild, channel_name, channel_type)
 
             try:
@@ -1601,6 +1697,16 @@ async def setup_server(interaction: discord.Interaction):
             except (discord.Forbidden, discord.HTTPException):
                 skipped.append(f"#{channel_name}" if channel_type == "text" else channel_name)
 
+    # Force categories into the exact order SERVER_TEMPLATE defines them (Staff first),
+    # since creation order alone doesn't guarantee position once categories already exist.
+    try:
+        for index, category_name in enumerate(SERVER_TEMPLATE.keys()):
+            category = category_objects.get(category_name)
+            if category is not None:
+                await category.edit(position=index, reason=f"Server setup reorder by {interaction.user}")
+    except (discord.Forbidden, discord.HTTPException):
+        skipped.append("Category ordering")
+
     if afk_channel and me.guild_permissions.manage_guild:
         try:
             await guild.edit(
@@ -1612,17 +1718,23 @@ async def setup_server(interaction: discord.Interaction):
 
     embed = _base_embed(
         "✅  Server Setup Complete",
-        "Created or refreshed the community channel layout.",
+        "Created or refreshed the community role hierarchy and channel layout.",
         C.SUCCESS,
     )
-    embed.add_field(name="Created", value="\n".join(created[:20]) or "None", inline=False)
-    embed.add_field(name="Updated", value="\n".join(updated[:20]) or "None", inline=False)
+    if roles_created or roles_updated:
+        role_lines = [f"🆕 {name}" for name in roles_created] + [f"🔄 {name}" for name in roles_updated]
+        embed.add_field(name="Roles", value="\n".join(role_lines) or "None", inline=False)
+    if roles_skipped:
+        embed.add_field(name="Roles Skipped", value="\n".join(roles_skipped), inline=False)
+
+    embed.add_field(name="Categories/Channels Created", value="\n".join(created[:20]) or "None", inline=False)
+    embed.add_field(name="Categories/Channels Updated", value="\n".join(updated[:20]) or "None", inline=False)
 
     if skipped:
         embed.add_field(name="Skipped", value="\n".join(skipped[:20]), inline=False)
 
     embed.set_footer(
-        text="Use /setup_server again to refresh permissions and topics.",
+        text="Use /setup_server again to refresh roles, permissions, and topics.",
         icon_url=BOT_THUMBNAIL,
     )
     await interaction.followup.send(embed=embed, ephemeral=True)
